@@ -25,6 +25,7 @@ Item {
   readonly property int dayEndHour: Math.max(dayStartHour + 1, intSetting("dayEndHour", 22, 1, 24))
   readonly property string feedsFile: stringSetting("feedsFile", "")
   readonly property bool notificationsEnabled: boolSetting("notificationsEnabled", true)
+  readonly property bool notificationSoundEnabled: boolSetting("notificationSoundEnabled", true)
   readonly property int reminderMinutes: intSetting("reminderMinutes", 60, 1, 10080)
   readonly property var reminderOverrides: settings && settings.reminderOverrides
     ? settings.reminderOverrides : ({})
@@ -44,6 +45,10 @@ Item {
 
   function scriptPath(name) {
     return String(Qt.resolvedUrl("bin/" + name)).replace(/^file:\/\//, "")
+  }
+
+  function assetPath(name) {
+    return String(Qt.resolvedUrl("assets/" + name)).replace(/^file:\/\//, "")
   }
 
   function intSetting(name, fallback, min, max) {
@@ -83,7 +88,10 @@ Item {
       firedReminders = next
       var when = Qt.formatDateTime(event.start, "HH:mm")
       var body = "Starts at " + when + (event.location ? " · " + event.location : "")
-      Quickshell.execDetached(["notify-send", "--app-name=Proton Calendar", "--icon=calendar", event.title, body])
+      Quickshell.execDetached(["notify-send", "--app-name=Proton Calendar",
+        "--icon=" + assetPath("proton-calendar.svg"), event.title, body])
+      if (notificationSoundEnabled)
+        Quickshell.execDetached(["canberra-gtk-play", "--id", "alarm-clock-elapsed", "--description", "Proton Calendar reminder"])
     }
   }
 

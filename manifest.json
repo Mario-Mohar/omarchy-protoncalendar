@@ -29,6 +29,7 @@
       "dayStartHour": 7,
       "dayEndHour": 22,
       "notificationsEnabled": true,
+      "notificationSoundEnabled": true,
       "reminderMinutes": 60,
       "feedsFile": ""
     },
@@ -91,6 +92,13 @@
         "label": "Event notifications",
         "defaultValue": true,
         "description": "Show a desktop notification before timed events."
+      },
+      {
+        "key": "notificationSoundEnabled",
+        "type": "boolean",
+        "label": "Notification sound",
+        "defaultValue": true,
+        "description": "Play the desktop alarm sound with calendar notifications."
       },
       {
         "key": "reminderMinutes",

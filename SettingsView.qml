@@ -6,11 +6,12 @@ Item {
   id: root
 
   property bool notificationsEnabled: true
+  property bool notificationSoundEnabled: true
   property int reminderMinutes: 60
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
 
-  signal settingsRequested(bool enabled, int minutes)
+  signal settingsRequested(bool enabled, bool soundEnabled, int minutes)
   signal testRequested()
 
   readonly property color dim: Qt.darker(foreground, 1.55)
@@ -20,7 +21,8 @@ Item {
   function applyMinutes(value) {
     var parsed = parseInt(value, 10)
     if (isNaN(parsed)) return
-    root.settingsRequested(enabledButton.checked, Math.max(1, Math.min(10080, parsed)))
+    root.settingsRequested(enabledButton.checked, root.notificationSoundEnabled,
+      Math.max(1, Math.min(10080, parsed)))
   }
 
   Column {
@@ -48,11 +50,25 @@ Item {
         bordered: true
         foreground: root.foreground
         fontFamily: root.fontFamily
-        onClicked: root.settingsRequested(!checked, root.reminderMinutes)
+        onClicked: root.settingsRequested(!checked, root.notificationSoundEnabled,
+          root.reminderMinutes)
+      }
+
+      Button {
+        id: soundButton
+        property bool checked: root.notificationSoundEnabled
+        text: checked ? "Alarm sound on" : "Alarm sound off"
+        iconText: checked ? "󰕾" : "󰝟"
+        selected: checked
+        bordered: true
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        onClicked: root.settingsRequested(root.notificationsEnabled, !checked,
+          root.reminderMinutes)
       }
 
       ButtonGroup {
-        width: parent.width - enabledButton.width - Style.space(6)
+        width: parent.width - enabledButton.width - soundButton.width - Style.space(12)
         options: ["15 min", "30 min", "1 hour", "2 hours"]
         value: root.reminderMinutes === 15 ? "15 min"
           : root.reminderMinutes === 30 ? "30 min"
@@ -64,7 +80,8 @@ Item {
         fontSize: Style.font.caption
         onChanged: function (value) {
           var values = { "15 min": 15, "30 min": 30, "1 hour": 60, "2 hours": 120 }
-          if (values[value]) root.settingsRequested(root.notificationsEnabled, values[value])
+          if (values[value]) root.settingsRequested(root.notificationsEnabled,
+            root.notificationSoundEnabled, values[value])
         }
       }
     }
