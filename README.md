@@ -4,7 +4,7 @@ Your Proton Calendar in the Omarchy bar: what's next, a month grid, a week
 grid, and an upcoming list — with a quick add that hands off to the Proton web
 app.
 
-![Preview](preview.png)
+![Preview](preview-v2.png)
 
 ## What's new in 0.2.0
 
