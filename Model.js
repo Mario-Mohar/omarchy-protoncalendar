@@ -174,6 +174,19 @@ function parseEvent(raw) {
   }
 }
 
+function reminderKey(event) {
+  if (!event) return ""
+  return encodeURIComponent(event.uid || event.title) + "@" + event.startMs
+}
+
+function reminderMinutes(event, overrides, fallback) {
+  var value = overrides ? overrides[reminderKey(event)] : undefined
+  if (value === false || value === "off") return -1
+  if (value === undefined || value === null || value === "") return fallback
+  var parsed = parseInt(value, 10)
+  return isFinite(parsed) ? Math.max(1, Math.min(10080, parsed)) : fallback
+}
+
 function parseEvents(list) {
   var out = []
   if (!list || typeof list.length !== "number") return out
@@ -531,6 +544,7 @@ if (typeof module !== "undefined") {
     monthGrid: monthGrid, stepMonth: stepMonth, weekDays: weekDays,
     weekNumberOf: weekNumberOf, startOfDay: startOfDay, addDays: addDays,
     parseStamp: parseStamp, parseEvent: parseEvent, parseEvents: parseEvents,
+    reminderKey: reminderKey, reminderMinutes: reminderMinutes,
     bucketByDay: bucketByDay, eventsOn: eventsOn, allDayOn: allDayOn, timedOn: timedOn,
     nextUpcoming: nextUpcoming, relativeLabel: relativeLabel,
     upcoming: upcoming, groupByMonth: groupByMonth, hasEnded: hasEnded,

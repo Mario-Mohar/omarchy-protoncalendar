@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.itsmoorgrove.protoncalendar",
   "name": "Proton Calendar",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "author": "moorgrove",
   "license": "MIT",
   "description": "Proton Calendar in the Omarchy bar: next event, month grid, and week grid.",
@@ -28,6 +28,8 @@
       "defaultView": "Month",
       "dayStartHour": 7,
       "dayEndHour": 22,
+      "notificationsEnabled": true,
+      "reminderMinutes": 60,
       "feedsFile": ""
     },
     "schema": [
@@ -82,6 +84,23 @@
         "max": 24,
         "step": 1,
         "defaultValue": 22
+      },
+      {
+        "key": "notificationsEnabled",
+        "type": "boolean",
+        "label": "Event notifications",
+        "defaultValue": true,
+        "description": "Show a desktop notification before timed events."
+      },
+      {
+        "key": "reminderMinutes",
+        "type": "integer",
+        "label": "Notify before event (minutes)",
+        "min": 1,
+        "max": 10080,
+        "step": 1,
+        "defaultValue": 60,
+        "description": "Default reminder time. Individual events can override it in the widget."
       },
       {
         "key": "feedsFile",

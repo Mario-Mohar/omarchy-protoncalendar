@@ -24,6 +24,11 @@ Item {
   readonly property int dayStartHour: intSetting("dayStartHour", 7, 0, 23)
   readonly property int dayEndHour: Math.max(dayStartHour + 1, intSetting("dayEndHour", 22, 1, 24))
   readonly property string feedsFile: stringSetting("feedsFile", "")
+  readonly property bool notificationsEnabled: boolSetting("notificationsEnabled", true)
+  readonly property int reminderMinutes: intSetting("reminderMinutes", 60, 1, 10080)
+  readonly property var reminderOverrides: settings && settings.reminderOverrides
+    ? settings.reminderOverrides : ({})
+  property var firedReminders: ({})
 
   SystemClock {
     id: clock
@@ -52,6 +57,34 @@ Item {
     return String(v)
   }
 
+  function boolSetting(name, fallback) {
+    var v = settings ? settings[name] : undefined
+    if (v === undefined || v === null) return fallback
+    return v === true || String(v).toLowerCase() === "true" || String(v) === "1"
+  }
+
+  function checkReminders() {
+    if (!notificationsEnabled || !events) return
+    var stamp = now.getTime()
+    for (var i = 0; i < events.length; i++) {
+      var event = events[i]
+      if (!event || event.cancelled || event.allDay || event.startMs <= stamp) continue
+      var minutes = Model.reminderMinutes(event, reminderOverrides, reminderMinutes)
+      if (minutes < 0) continue
+      var target = event.startMs - minutes * 60000
+      if (stamp < target || stamp >= target + 300000) continue
+      var key = Model.reminderKey(event) + ":" + minutes
+      if (firedReminders[key]) continue
+      var next = {}
+      for (var existing in firedReminders) next[existing] = firedReminders[existing]
+      next[key] = true
+      firedReminders = next
+      var when = Qt.formatDateTime(event.start, "HH:mm")
+      var body = "Starts at " + when + (event.location ? " · " + event.location : "")
+      Quickshell.execDetached(["notify-send", "--app-name=Proton Calendar", "--icon=calendar", event.title, body])
+    }
+  }
+
   function syncArgs(extra) {
     var args = ["python3", scriptPath("protoncal-sync")]
     if (feedsFile !== "") args = args.concat(["--feeds", feedsFile])
@@ -68,6 +101,7 @@ Item {
     root.error = state.error
     root.generatedAt = state.generatedAt
     root.everLoaded = true
+    Qt.callLater(root.checkReminders)
   }
 
   function refresh() {
@@ -147,6 +181,13 @@ Item {
     repeat: true
     running: true
     onTriggered: root.refresh()
+  }
+
+  Timer {
+    interval: 30000
+    repeat: true
+    running: true
+    onTriggered: root.checkReminders()
   }
 
   Component.onCompleted: {

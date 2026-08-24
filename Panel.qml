@@ -54,6 +54,8 @@ Panel {
   readonly property var weekDayList: Model.weekDays(viewWeek, weekStart, todayKey)
   readonly property var selectedEvents: Model.eventsOn(buckets, selectedKey)
   readonly property var nextEvent: service ? service.nextEvent : null
+  readonly property int defaultReminderMinutes: service ? service.reminderMinutes : 60
+  readonly property var reminderOverrides: service ? service.reminderOverrides : ({})
 
   readonly property bool configured: service ? service.configured : false
   readonly property string statusLine: {
@@ -170,6 +172,20 @@ Panel {
 
   function toggleWeekStart() {
     persistSettings({ weekStartDay: Model.weekStartSettingName(Model.toggledWeekStart(root.weekStart)) })
+  }
+
+  function setNotificationSettings(enabled, minutes) {
+    persistSettings({ notificationsEnabled: enabled, reminderMinutes: minutes })
+  }
+
+  function setEventReminder(event, value) {
+    if (!event) return
+    var overrides = {}
+    for (var key in root.reminderOverrides) overrides[key] = root.reminderOverrides[key]
+    var eventKey = Model.reminderKey(event)
+    if (value === null || value === undefined) delete overrides[eventKey]
+    else overrides[eventKey] = value
+    persistSettings({ reminderOverrides: overrides })
   }
 
   function whenText(event) {
@@ -308,6 +324,18 @@ Panel {
             }
           }
 
+          SettingsView {
+            width: parent.width
+            visible: root.configured && root.settingsOpen
+            notificationsEnabled: root.service ? root.service.notificationsEnabled : true
+            reminderMinutes: root.defaultReminderMinutes
+            foreground: root.contentForeground
+            fontFamily: root.contentFontFamily
+            onSettingsRequested: function (enabled, minutes) {
+              root.setNotificationSettings(enabled, minutes)
+            }
+          }
+
           PanelSeparator {
             width: parent.width
             visible: root.configured && root.settingsOpen
@@ -421,7 +449,7 @@ Panel {
               PanelActionButton {
                 anchors.verticalCenter: parent.verticalCenter
                 iconText: "󰒓"
-                tooltipText: root.settingsOpen ? "Hide calendars" : "Calendars"
+                tooltipText: root.settingsOpen ? "Hide settings" : "Settings"
                 bordered: root.settingsOpen
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
@@ -473,7 +501,10 @@ Panel {
               todayKey: root.todayKey
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
+              defaultReminderMinutes: root.defaultReminderMinutes
+              reminderOverrides: root.reminderOverrides
               onEventActivated: function (event) { root.openEvent(event) }
+              onReminderChanged: function (event, value) { root.setEventReminder(event, value) }
             }
 
             WeekView {
@@ -531,7 +562,13 @@ Panel {
                 event: modelData
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
+                reminderMinutes: Model.reminderMinutes(modelData, root.reminderOverrides, root.defaultReminderMinutes) < 0
+                  ? root.defaultReminderMinutes
+                  : Model.reminderMinutes(modelData, root.reminderOverrides, root.defaultReminderMinutes)
+                reminderInherited: root.reminderOverrides[Model.reminderKey(modelData)] === undefined
+                reminderOff: Model.reminderMinutes(modelData, root.reminderOverrides, root.defaultReminderMinutes) < 0
                 onActivated: root.openEvent(modelData)
+                onReminderChanged: function (event, value) { root.setEventReminder(event, value) }
               }
             }
           }

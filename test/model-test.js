@@ -14,6 +14,13 @@ console.log(`-- payload: configured=${payload.configured} stale=${payload.stale}
 const buckets = M.bucketByDay(payload.events)
 const byTitle = t => payload.events.filter(e => e.title.includes(t))
 
+const reminderEvent = payload.events[0]
+const reminderId = M.reminderKey(reminderEvent)
+check("reminder defaults", M.reminderMinutes(reminderEvent, {}, 60), 60)
+check("reminder override", M.reminderMinutes(reminderEvent, { [reminderId]: 25 }, 60), 25)
+check("reminder off", M.reminderMinutes(reminderEvent, { [reminderId]: false }, 60), -1)
+check("reminder lower bound", M.reminderMinutes(reminderEvent, { [reminderId]: 0 }, 60), 1)
+
 // All-day: exclusive DTEND must become an inclusive last date.
 const semester = byTitle("Semester")[0]
 check("Semester lastDate", M.keyForDate(semester.lastDate), "2026-08-27")

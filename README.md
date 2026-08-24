@@ -49,6 +49,8 @@ Settings → Calendars → your calendar → Share → Share with anyone).
 - **Quick add** — day pre-filled, time defaults to the next half hour, title
   copied to the clipboard, opens Proton on the right day
 - **Multiple calendars** — add and remove feeds from the panel's gear menu
+- **Notifications** — one hour before timed events by default, with a custom
+  global lead time and per-event overrides from the event bell
 
 ## Keyboard
 
@@ -77,6 +79,8 @@ Right-click the bar widget to cycle the bar label; middle-click to refresh.
 | `defaultView` | enum | `Month` | `Month`, `Week`, or `Upcoming` |
 | `dayStartHour` | integer | 7 | Week view window start |
 | `dayEndHour` | integer | 22 | Week view window end |
+| `notificationsEnabled` | boolean | `true` | Desktop notifications for timed events |
+| `reminderMinutes` | integer | 60 | Default notification lead time |
 | `feedsFile` | path | — | Defaults to `~/.config/omarchy/protoncalendar/feeds.json` |
 
 ## Tests

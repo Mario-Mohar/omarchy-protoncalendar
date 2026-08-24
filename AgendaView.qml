@@ -11,7 +11,10 @@ Item {
   property string todayKey: ""
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
+  property int defaultReminderMinutes: 60
+  property var reminderOverrides: ({})
   signal eventActivated(var event)
+  signal reminderChanged(var event, var value)
 
   readonly property var groups: Model.groupByMonth(Model.upcoming(events, now))
   readonly property int total: {
@@ -85,7 +88,13 @@ Item {
             showDate: true
             foreground: root.foreground
             fontFamily: root.fontFamily
+            reminderMinutes: Model.reminderMinutes(modelData, root.reminderOverrides, root.defaultReminderMinutes) < 0
+              ? root.defaultReminderMinutes
+              : Model.reminderMinutes(modelData, root.reminderOverrides, root.defaultReminderMinutes)
+            reminderInherited: root.reminderOverrides[Model.reminderKey(modelData)] === undefined
+            reminderOff: Model.reminderMinutes(modelData, root.reminderOverrides, root.defaultReminderMinutes) < 0
             onActivated: root.eventActivated(modelData)
+            onReminderChanged: function (event, value) { root.reminderChanged(event, value) }
           }
         }
       }
