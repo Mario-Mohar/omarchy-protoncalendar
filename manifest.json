@@ -18,7 +18,12 @@
     "category": "Time",
     "aliases": [
       "calendar",
-      "proton-calendar"
+      "proton-calendar",
+      "proton",
+      "omarchy",
+      "quickshell",
+      "notifications",
+      "reminders"
     ],
     "allowMultiple": false,
     "defaultSection": "center",

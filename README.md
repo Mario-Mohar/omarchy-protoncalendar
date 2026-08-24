@@ -6,6 +6,15 @@ app.
 
 ![Preview](preview.png)
 
+## What's new in 0.2.0
+
+- Desktop notifications one hour before timed events by default
+- Global reminder presets, custom minutes, and per-event overrides
+- Optional alarm sound with four live-preview choices
+- One-minute notification test directly from the settings panel
+- Official Proton Calendar icon in desktop notifications
+- A cleaner, aligned notification settings layout
+
 ## What it does, and what it can't
 
 Proton Calendar has no CalDAV and no public write API. Reading works well:
@@ -50,7 +59,7 @@ Settings → Calendars → your calendar → Share → Share with anyone).
   copied to the clipboard, opens Proton on the right day
 - **Multiple calendars** — add and remove feeds from the panel's gear menu
 - **Notifications** — one hour before timed events by default, with a custom
-  global lead time and per-event overrides from the event bell
+  global lead time, per-event overrides, selectable sounds, and a built-in test
 
 ## Keyboard
 
