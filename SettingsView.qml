@@ -11,6 +11,7 @@ Item {
   property string fontFamily: Style.font.family
 
   signal settingsRequested(bool enabled, int minutes)
+  signal testRequested()
 
   readonly property color dim: Qt.darker(foreground, 1.55)
 
@@ -99,6 +100,17 @@ Item {
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
       }
+
+    }
+
+    Button {
+      text: "Test in 1 minute"
+      iconText: "󰂞"
+      bordered: true
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      fontSize: Style.font.caption
+      onClicked: root.testRequested()
     }
 
     Text {

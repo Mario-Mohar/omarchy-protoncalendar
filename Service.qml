@@ -29,6 +29,7 @@ Item {
   readonly property var reminderOverrides: settings && settings.reminderOverrides
     ? settings.reminderOverrides : ({})
   property var firedReminders: ({})
+  property var testEvent: null
 
   SystemClock {
     id: clock
@@ -69,7 +70,8 @@ Item {
     for (var i = 0; i < events.length; i++) {
       var event = events[i]
       if (!event || event.cancelled || event.allDay || event.startMs <= stamp) continue
-      var minutes = Model.reminderMinutes(event, reminderOverrides, reminderMinutes)
+      var minutes = event === testEvent ? 1
+        : Model.reminderMinutes(event, reminderOverrides, reminderMinutes)
       if (minutes < 0) continue
       var target = event.startMs - minutes * 60000
       if (stamp < target || stamp >= target + 300000) continue
@@ -83,6 +85,25 @@ Item {
       var body = "Starts at " + when + (event.location ? " · " + event.location : "")
       Quickshell.execDetached(["notify-send", "--app-name=Proton Calendar", "--icon=calendar", event.title, body])
     }
+  }
+
+  function scheduleTestReminder() {
+    var start = new Date(now.getTime() + 120000)
+    start.setSeconds(0, 0)
+    var end = new Date(start.getTime() + 1800000)
+    root.testEvent = Model.parseEvent({
+      uid: "protoncalendar-notification-test-" + start.getTime(),
+      title: "Proton Calendar test",
+      location: "Notification test",
+      start: start.toISOString(),
+      end: end.toISOString(),
+      allDay: false
+    })
+    var nextEvents = events.slice()
+    nextEvents.push(root.testEvent)
+    nextEvents.sort(function (a, b) { return a.startMs - b.startMs })
+    root.events = nextEvents
+    root.buckets = Model.bucketByDay(nextEvents)
   }
 
   function syncArgs(extra) {

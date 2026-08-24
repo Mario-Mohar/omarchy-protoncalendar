@@ -124,6 +124,7 @@ BarWidget {
     }
     function web(): void { calendar.openDay("", "", "", "week") }
     function cycleLabel(): void { root.cycleBarLabel() }
+    function testReminder(): void { calendar.scheduleTestReminder() }
     function upcoming(): string {
       var list = Model.upcoming(calendar.events, calendar.now)
       if (!list.length) return "Nothing coming up"

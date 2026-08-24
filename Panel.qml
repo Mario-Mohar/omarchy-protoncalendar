@@ -334,6 +334,9 @@ Panel {
             onSettingsRequested: function (enabled, minutes) {
               root.setNotificationSettings(enabled, minutes)
             }
+            onTestRequested: {
+              if (root.service) root.service.scheduleTestReminder()
+            }
           }
 
           PanelSeparator {
