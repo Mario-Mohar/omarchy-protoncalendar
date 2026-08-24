@@ -26,6 +26,7 @@ Item {
   readonly property string feedsFile: stringSetting("feedsFile", "")
   readonly property bool notificationsEnabled: boolSetting("notificationsEnabled", true)
   readonly property bool notificationSoundEnabled: boolSetting("notificationSoundEnabled", true)
+  readonly property string notificationSound: normalizedSound(stringSetting("notificationSound", "Alarm"))
   readonly property int reminderMinutes: intSetting("reminderMinutes", 60, 1, 10080)
   readonly property var reminderOverrides: settings && settings.reminderOverrides
     ? settings.reminderOverrides : ({})
@@ -69,6 +70,26 @@ Item {
     return v === true || String(v).toLowerCase() === "true" || String(v) === "1"
   }
 
+  function normalizedSound(value) {
+    var sounds = { "Gentle": true, "Bell": true, "Chime": true, "Alarm": true }
+    return sounds[value] ? value : "Alarm"
+  }
+
+  function soundId(value) {
+    var sounds = {
+      "Gentle": "message-new-instant",
+      "Bell": "bell",
+      "Chime": "complete",
+      "Alarm": "alarm-clock-elapsed"
+    }
+    return sounds[normalizedSound(value)]
+  }
+
+  function previewSound(value) {
+    Quickshell.execDetached(["canberra-gtk-play", "--id", soundId(value),
+      "--description", "Proton Calendar reminder"])
+  }
+
   function checkReminders() {
     if (!notificationsEnabled || !events) return
     var stamp = now.getTime()
@@ -91,7 +112,7 @@ Item {
       Quickshell.execDetached(["notify-send", "--app-name=Proton Calendar",
         "--icon=" + assetPath("proton-calendar.svg"), event.title, body])
       if (notificationSoundEnabled)
-        Quickshell.execDetached(["canberra-gtk-play", "--id", "alarm-clock-elapsed", "--description", "Proton Calendar reminder"])
+        previewSound(notificationSound)
     }
   }
 

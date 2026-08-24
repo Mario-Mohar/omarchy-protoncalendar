@@ -81,6 +81,7 @@ Right-click the bar widget to cycle the bar label; middle-click to refresh.
 | `dayEndHour` | integer | 22 | Week view window end |
 | `notificationsEnabled` | boolean | `true` | Desktop notifications for timed events |
 | `notificationSoundEnabled` | boolean | `true` | Alarm sound with event notifications |
+| `notificationSound` | enum | `Alarm` | `Gentle`, `Bell`, `Chime`, or `Alarm` |
 | `reminderMinutes` | integer | 60 | Default notification lead time |
 | `feedsFile` | path | — | Defaults to `~/.config/omarchy/protoncalendar/feeds.json` |
 

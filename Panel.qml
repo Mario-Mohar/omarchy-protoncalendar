@@ -174,10 +174,11 @@ Panel {
     persistSettings({ weekStartDay: Model.weekStartSettingName(Model.toggledWeekStart(root.weekStart)) })
   }
 
-  function setNotificationSettings(enabled, soundEnabled, minutes) {
+  function setNotificationSettings(enabled, soundEnabled, sound, minutes) {
     persistSettings({
       notificationsEnabled: enabled,
       notificationSoundEnabled: soundEnabled,
+      notificationSound: sound,
       reminderMinutes: minutes
     })
   }
@@ -333,11 +334,15 @@ Panel {
             visible: root.configured && root.settingsOpen
             notificationsEnabled: root.service ? root.service.notificationsEnabled : true
             notificationSoundEnabled: root.service ? root.service.notificationSoundEnabled : true
+            notificationSound: root.service ? root.service.notificationSound : "Alarm"
             reminderMinutes: root.defaultReminderMinutes
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
-            onSettingsRequested: function (enabled, soundEnabled, minutes) {
-              root.setNotificationSettings(enabled, soundEnabled, minutes)
+            onSettingsRequested: function (enabled, soundEnabled, sound, minutes) {
+              root.setNotificationSettings(enabled, soundEnabled, sound, minutes)
+            }
+            onSoundPreviewRequested: function (sound) {
+              if (root.service) root.service.previewSound(sound)
             }
             onTestRequested: {
               if (root.service) root.service.scheduleTestReminder()

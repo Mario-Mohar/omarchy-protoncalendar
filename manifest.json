@@ -30,6 +30,7 @@
       "dayEndHour": 22,
       "notificationsEnabled": true,
       "notificationSoundEnabled": true,
+      "notificationSound": "Alarm",
       "reminderMinutes": 60,
       "feedsFile": ""
     },
@@ -99,6 +100,19 @@
         "label": "Notification sound",
         "defaultValue": true,
         "description": "Play the desktop alarm sound with calendar notifications."
+      },
+      {
+        "key": "notificationSound",
+        "type": "enum",
+        "label": "Notification sound",
+        "options": [
+          "Gentle",
+          "Bell",
+          "Chime",
+          "Alarm"
+        ],
+        "defaultValue": "Alarm",
+        "description": "Sound played with calendar notifications."
       },
       {
         "key": "reminderMinutes",

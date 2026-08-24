@@ -7,28 +7,36 @@ Item {
 
   property bool notificationsEnabled: true
   property bool notificationSoundEnabled: true
+  property string notificationSound: "Alarm"
   property int reminderMinutes: 60
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
 
-  signal settingsRequested(bool enabled, bool soundEnabled, int minutes)
+  signal settingsRequested(bool enabled, bool soundEnabled, string sound, int minutes)
+  signal soundPreviewRequested(string sound)
   signal testRequested()
 
   readonly property color dim: Qt.darker(foreground, 1.55)
+  readonly property real labelWidth: Style.space(112)
+  readonly property real controlHeight: Style.space(32)
 
   implicitHeight: column.implicitHeight
 
+  function save(enabled, soundEnabled, sound, minutes) {
+    root.settingsRequested(enabled, soundEnabled, sound,
+      Math.max(1, Math.min(10080, minutes)))
+  }
+
   function applyMinutes(value) {
     var parsed = parseInt(value, 10)
-    if (isNaN(parsed)) return
-    root.settingsRequested(enabledButton.checked, root.notificationSoundEnabled,
-      Math.max(1, Math.min(10080, parsed)))
+    if (!isNaN(parsed)) save(root.notificationsEnabled,
+      root.notificationSoundEnabled, root.notificationSound, parsed)
   }
 
   Column {
     id: column
     width: parent.width
-    spacing: Style.space(8)
+    spacing: Style.space(7)
 
     PanelSectionHeader {
       width: parent.width
@@ -39,36 +47,54 @@ Item {
 
     Row {
       width: parent.width
+      height: root.controlHeight
       spacing: Style.space(6)
 
       Button {
-        id: enabledButton
-        property bool checked: root.notificationsEnabled
-        text: checked ? "Notifications on" : "Notifications off"
-        iconText: checked ? "󰂞" : "󰂛"
-        selected: checked
+        width: (parent.width - Style.space(6)) / 2
+        height: root.controlHeight
+        text: root.notificationsEnabled ? "Notifications on" : "Notifications off"
+        iconText: root.notificationsEnabled ? "󰂞" : "󰂛"
+        selected: root.notificationsEnabled
         bordered: true
         foreground: root.foreground
         fontFamily: root.fontFamily
-        onClicked: root.settingsRequested(!checked, root.notificationSoundEnabled,
-          root.reminderMinutes)
+        fontSize: Style.font.caption
+        onClicked: root.save(!root.notificationsEnabled,
+          root.notificationSoundEnabled, root.notificationSound, root.reminderMinutes)
       }
 
       Button {
-        id: soundButton
-        property bool checked: root.notificationSoundEnabled
-        text: checked ? "Alarm sound on" : "Alarm sound off"
-        iconText: checked ? "󰕾" : "󰝟"
-        selected: checked
+        width: (parent.width - Style.space(6)) / 2
+        height: root.controlHeight
+        text: root.notificationSoundEnabled ? "Alarm sound on" : "Alarm sound off"
+        iconText: root.notificationSoundEnabled ? "󰕾" : "󰝟"
+        selected: root.notificationSoundEnabled
         bordered: true
         foreground: root.foreground
         fontFamily: root.fontFamily
-        onClicked: root.settingsRequested(root.notificationsEnabled, !checked,
-          root.reminderMinutes)
+        fontSize: Style.font.caption
+        onClicked: root.save(root.notificationsEnabled,
+          !root.notificationSoundEnabled, root.notificationSound, root.reminderMinutes)
+      }
+    }
+
+    Row {
+      width: parent.width
+      height: root.controlHeight
+      spacing: Style.space(6)
+
+      Text {
+        width: root.labelWidth
+        anchors.verticalCenter: parent.verticalCenter
+        text: "REMIND BEFORE"
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
       }
 
       ButtonGroup {
-        width: parent.width - enabledButton.width - soundButton.width - Style.space(12)
+        width: parent.width - root.labelWidth - Style.space(6)
         options: ["15 min", "30 min", "1 hour", "2 hours"]
         value: root.reminderMinutes === 15 ? "15 min"
           : root.reminderMinutes === 30 ? "30 min"
@@ -80,19 +106,30 @@ Item {
         fontSize: Style.font.caption
         onChanged: function (value) {
           var values = { "15 min": 15, "30 min": 30, "1 hour": 60, "2 hours": 120 }
-          if (values[value]) root.settingsRequested(root.notificationsEnabled,
-            root.notificationSoundEnabled, values[value])
+          if (values[value]) root.save(root.notificationsEnabled,
+            root.notificationSoundEnabled, root.notificationSound, values[value])
         }
       }
     }
 
     Row {
       width: parent.width
+      height: root.controlHeight
       spacing: Style.space(6)
+
+      Text {
+        width: root.labelWidth
+        anchors.verticalCenter: parent.verticalCenter
+        text: "CUSTOM"
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+      }
 
       TextField {
         id: minutesField
-        width: Style.space(92)
+        width: Style.space(90)
+        height: root.controlHeight
         placeholderText: String(root.reminderMinutes)
         inputMethodHints: Qt.ImhDigitsOnly
         foreground: root.foreground
@@ -102,6 +139,7 @@ Item {
       }
 
       Button {
+        height: root.controlHeight
         text: "Set minutes"
         bordered: true
         foreground: root.foreground
@@ -112,22 +150,53 @@ Item {
 
       Text {
         anchors.verticalCenter: parent.verticalCenter
-        text: root.reminderMinutes + " minutes before each timed event"
+        text: root.reminderMinutes + " min before"
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+      }
+    }
+
+    Row {
+      width: parent.width
+      height: root.controlHeight
+      spacing: Style.space(6)
+
+      Text {
+        width: root.labelWidth
+        anchors.verticalCenter: parent.verticalCenter
+        text: "ALARM SOUND"
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
       }
 
-    }
+      ButtonGroup {
+        width: parent.width - root.labelWidth - testButton.width - Style.space(12)
+        options: ["Gentle", "Bell", "Chime", "Alarm"]
+        value: root.notificationSound
+        foreground: root.foreground
+        background: Color.background
+        fontFamily: root.fontFamily
+        fontSize: Style.font.caption
+        onChanged: function (value) {
+          root.save(root.notificationsEnabled, root.notificationSoundEnabled,
+            value, root.reminderMinutes)
+          root.soundPreviewRequested(value)
+        }
+      }
 
-    Button {
-      text: "Test in 1 minute"
-      iconText: "󰂞"
-      bordered: true
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      fontSize: Style.font.caption
-      onClicked: root.testRequested()
+      Button {
+        id: testButton
+        height: root.controlHeight
+        text: "Test in 1 minute"
+        iconText: "󰂞"
+        bordered: true
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        fontSize: Style.font.caption
+        onClicked: root.testRequested()
+      }
     }
 
     Text {
