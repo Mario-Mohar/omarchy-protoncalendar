@@ -122,8 +122,14 @@ Item {
 
   function apply(text) {
     var state = Model.readPayload(text)
-    root.events = state.events
-    root.buckets = Model.bucketByDay(state.events)
+    var appliedEvents = state.events
+    if (testEvent && testEvent.endMs > now.getTime()) {
+      appliedEvents = state.events.slice()
+      appliedEvents.push(testEvent)
+      appliedEvents.sort(function (a, b) { return a.startMs - b.startMs })
+    }
+    root.events = appliedEvents
+    root.buckets = Model.bucketByDay(appliedEvents)
     root.feeds = state.feeds
     root.configured = state.configured
     root.stale = state.stale
