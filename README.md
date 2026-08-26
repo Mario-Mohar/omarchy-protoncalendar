@@ -6,6 +6,10 @@ app.
 
 ![Preview](preview-v2.png)
 
+## What's new in 0.3.0
+
+- Choose Sunday or Monday as the first day of the week from the settings panel
+
 ## What's new in 0.2.0
 
 - Desktop notifications one hour before timed events by default
