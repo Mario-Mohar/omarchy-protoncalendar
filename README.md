@@ -12,7 +12,6 @@ app.
   reminders, calendar management, status text, and settings controls
 - Language-aware date formatting that follows the plugin language instead of
   the desktop locale
-- Refreshed English preview with isolated demo calendars and no personal data
 
 ## What's new in 0.4.0
 
