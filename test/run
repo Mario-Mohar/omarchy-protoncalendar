@@ -31,6 +31,7 @@ export TZ=Europe/Stockholm
 # default (see the SSRF test below for proof that it actually does). Only
 # the test harness sets this -- a real sync never does.
 export PROTONCAL_ALLOW_PRIVATE_HOSTS=1
+export PROTONCAL_DISABLE_SECRET_STORE=1
 
 printf '[{"name": "", "url": "http://127.0.0.1:%s/fixture.ics"}]\n' "$port" > "$work/feeds.json"
 
@@ -198,4 +199,61 @@ import json
 feeds = json.load(open('$work/cli-feeds.json'))
 assert feeds == [], feeds
 print('   add/remove via argv still works')
+"
+
+echo "== feed preferences update by non-secret id"
+echo '[]' > "$work/preference-feeds.json"
+PROTONCAL_FEED_URL="$secret_url" "$root/bin/protoncal-sync" \
+  --feeds "$work/preference-feeds.json" --add-feed-env --name Preferences >/dev/null
+feed_id=$(python3 -c "import json; print(json.load(open('$work/preference-feeds.json'))[0]['id'])")
+PROTONCAL_FEED_UPDATE="{\"id\":\"$feed_id\",\"name\":\"Work\",\"color\":\"#112233\",\"enabled\":false,\"notificationsEnabled\":false,\"reminderMinutes\":25}" \
+  "$root/bin/protoncal-sync" --feeds "$work/preference-feeds.json" --update-feed-env >/dev/null
+python3 -c "
+import json
+feed = json.load(open('$work/preference-feeds.json'))[0]
+assert feed['name'] == 'Work' and feed['color'] == '#112233', feed
+assert not feed['enabled'] and not feed['notificationsEnabled'], feed
+assert feed['reminderMinutes'] == 25, feed
+print('   preferences saved:', feed['name'], feed['color'])
+"
+
+echo "== share links migrate into Secret Service"
+unset PROTONCAL_DISABLE_SECRET_STORE
+export PROTONCAL_SECRET_TOOL="$root/test/fake-secret-tool"
+export PROTONCAL_TEST_SECRET_DIR="$work/secrets"
+printf '[{"name":"Secure","url":"%s"}]\n' "$secret_url" > "$work/secure-feeds.json"
+"$root/bin/protoncal-sync" --feeds "$work/secure-feeds.json" > "$work/secure-payload.json"
+python3 -c "
+import json
+feed = json.load(open('$work/secure-feeds.json'))[0]
+payload = json.load(open('$work/secure-payload.json'))
+assert feed['secretStored'] and 'url' not in feed, feed
+assert payload['ok'] and payload['events'], payload
+assert 'url' not in payload['feeds'][0], payload['feeds'][0]
+print('   keyring-backed feed:', feed['id'])
+"
+
+echo "== notification actions use a private stdin payload"
+notification_command=$(printf '%s\n' '{"title":"Test","body":"Body","url":"https://calendar.proton.me"}' \
+  | PROTONCAL_NOTIFY_DRY_RUN=1 "$root/bin/protoncal-notify" --worker)
+python3 -c "
+import json
+command = json.loads('''$notification_command''')
+assert '--action=default=Open in Proton' in command, command
+assert '--action=snooze-5=Snooze 5 min' in command, command
+assert '--action=snooze-15=Snooze 15 min' in command, command
+assert '--action=dismiss=Dismiss' in command, command
+print('   actions:', 4)
+"
+
+echo "== quick add prefill keeps the title out of argv"
+open_url=$(PROTONCAL_TITLE='Team sync' "$root/bin/protoncal-open" --date 2026-08-17 \
+  --time 09:30 --title-env --prefill --print)
+python3 -c "
+from urllib.parse import parse_qs, urlsplit
+url = urlsplit('$open_url')
+query = parse_qs(url.query)
+assert query['title'] == ['Team sync'], query
+assert query['startTime'] == ['09:30'], query
+print('   prefilled:', query['title'][0], query['startTime'][0])
 "

@@ -1,6 +1,35 @@
 var MS_PER_DAY = 86400000
 var MS_PER_MINUTE = 60000
 var WEEKDAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+var MEETING_HOSTS = /(meet\.google\.com|zoom\.us|teams\.microsoft\.com|meet\.proton\.me|jitsi\.|whereby\.com|webex\.com)/i
+var TEXT = {
+  en: {
+    allDay: "all day", backToday: "Back to today", calendar: "Calendar",
+    calendars: "Calendars", copy: "Copy", copyLocation: "Copy location",
+    day: "Day", description: "Description", dismiss: "Dismiss", ended: "ended",
+    eventDetails: "Event details", join: "Join meeting", location: "Location",
+    monday: "Monday", month: "Month", next: "Next", noEvents: "Nothing scheduled.",
+    noResults: "No matching events.", notifications: "Notifications", now: "now",
+    openProton: "Open in Proton", organizer: "Organizer", participants: "Participants",
+    recurring: "Recurring", refresh: "Refresh", search: "Search events…",
+    settings: "Settings", snooze15: "Snooze 15 min", snooze5: "Snooze 5 min",
+    starting: "starting", sunday: "Sunday", today: "today", tomorrow: "tomorrow",
+    upcoming: "Upcoming", week: "Week"
+  },
+  sv: {
+    allDay: "hela dagen", backToday: "Tillbaka till idag", calendar: "Kalender",
+    calendars: "Kalendrar", copy: "Kopiera", copyLocation: "Kopiera plats",
+    day: "Dag", description: "Beskrivning", dismiss: "Stäng", ended: "avslutad",
+    eventDetails: "Eventdetaljer", join: "Anslut till möte", location: "Plats",
+    monday: "Måndag", month: "Månad", next: "Nästa", noEvents: "Inget planerat.",
+    noResults: "Inga matchande event.", notifications: "Notiser", now: "nu",
+    openProton: "Öppna i Proton", organizer: "Organisatör", participants: "Deltagare",
+    recurring: "Återkommande", refresh: "Uppdatera", search: "Sök event…",
+    settings: "Inställningar", snooze15: "Skjut upp 15 min", snooze5: "Skjut upp 5 min",
+    starting: "startar", sunday: "Söndag", today: "idag", tomorrow: "imorgon",
+    upcoming: "Kommande", week: "Vecka"
+  }
+}
 
 function pad2(value) {
   var n = Number(value)
@@ -9,6 +38,107 @@ function pad2(value) {
 
 function plainText(value) {
   return String(value === undefined || value === null ? "" : value).replace(/[<>]/g, "")
+}
+
+function resolvedLanguage(value, localeName) {
+  var configured = String(value || "System").toLowerCase()
+  if (configured === "swedish" || configured === "sv") return "sv"
+  if (configured === "english" || configured === "en") return "en"
+  return String(localeName || "").toLowerCase().indexOf("sv") === 0 ? "sv" : "en"
+}
+
+function text(key, language) {
+  var lang = language === "sv" ? "sv" : "en"
+  return TEXT[lang][key] || TEXT.en[key] || key
+}
+
+function labeledValue(value, language, values) {
+  var lang = language === "sv" ? "sv" : "en"
+  return values[value] ? values[value][lang] : String(value || "")
+}
+
+function valueFromLabel(label, language, values, fallback) {
+  var raw = String(label || "")
+  for (var value in values)
+    if (values[value].en === raw || values[value].sv === raw) return value
+  return fallback
+}
+
+function viewLabel(value, language) {
+  return labeledValue(value, language, {
+    Month: { en: "Month", sv: "Månad" }, Week: { en: "Week", sv: "Vecka" },
+    Day: { en: "Day", sv: "Dag" }, Upcoming: { en: "Upcoming", sv: "Kommande" }
+  })
+}
+
+function viewFromLabel(value, fallback) {
+  return valueFromLabel(value, "", {
+    Month: { en: "Month", sv: "Månad" }, Week: { en: "Week", sv: "Vecka" },
+    Day: { en: "Day", sv: "Dag" }, Upcoming: { en: "Upcoming", sv: "Kommande" }
+  }, fallback || "Month")
+}
+
+function scopeLabel(value, language) {
+  return labeledValue(value, language, {
+    All: { en: "All", sv: "Alla" }, Today: { en: "Today", sv: "Idag" },
+    Week: { en: "Week", sv: "Vecka" }
+  })
+}
+
+function scopeFromLabel(value) {
+  return valueFromLabel(value, "", {
+    All: { en: "All", sv: "Alla" }, Today: { en: "Today", sv: "Idag" },
+    Week: { en: "Week", sv: "Vecka" }
+  }, "All")
+}
+
+function barModeLabel(value, language) {
+  return labeledValue(value, language, {
+    Off: { en: "Off", sv: "Av" }, "Next event": { en: "Next event", sv: "Nästa event" },
+    Countdown: { en: "Countdown", sv: "Nedräkning" },
+    "Today count": { en: "Today count", sv: "Antal idag" },
+    "Current event": { en: "Current event", sv: "Pågående event" },
+    Privacy: { en: "Privacy", sv: "Privat" }
+  })
+}
+
+function barModeFromLabel(value) {
+  return valueFromLabel(value, "", {
+    Off: { en: "Off", sv: "Av" }, "Next event": { en: "Next event", sv: "Nästa event" },
+    Countdown: { en: "Countdown", sv: "Nedräkning" },
+    "Today count": { en: "Today count", sv: "Antal idag" },
+    "Current event": { en: "Current event", sv: "Pågående event" },
+    Privacy: { en: "Privacy", sv: "Privat" }
+  }, "Countdown")
+}
+
+function formatTime(date, mode) {
+  if (!date || isNaN(date.getTime())) return ""
+  var hour = date.getHours()
+  var minute = pad2(date.getMinutes())
+  if (String(mode) === "12-hour") {
+    var suffix = hour < 12 ? "AM" : "PM"
+    return (hour % 12 || 12) + ":" + minute + " " + suffix
+  }
+  return pad2(hour) + ":" + minute
+}
+
+function validWebUrl(value) {
+  var url = String(value || "").replace(/^\s+|\s+$/g, "")
+  return /^https:\/\/[^\s]+$/i.test(url) ? url : ""
+}
+
+function meetingLinkOf(raw) {
+  if (!raw) return ""
+  var direct = validWebUrl(raw.url)
+  if (direct && MEETING_HOSTS.test(direct)) return direct
+  var haystack = [raw.location, raw.description, raw.url].join(" ")
+  var links = haystack.match(/https:\/\/[^\s<>()]+/ig) || []
+  for (var i = 0; i < links.length; i++) {
+    var cleaned = links[i].replace(/[.,;!?]+$/, "")
+    if (MEETING_HOSTS.test(cleaned)) return cleaned
+  }
+  return direct
 }
 
 function dateKey(year, month, day) {
@@ -157,13 +287,29 @@ function parseEvent(raw) {
   var lastDate = allDay ? addDays(end, -1) : end
   if (allDay && lastDate.getTime() < start.getTime()) lastDate = start
 
-  return {
+  var attendees = []
+  var rawAttendees = raw.attendees || []
+  if (typeof rawAttendees.length === "number")
+    for (var i = 0; i < rawAttendees.length; i++) attendees.push(plainText(rawAttendees[i]))
+
+  var event = {
     uid: String(raw.uid || ""),
     title: plainText(raw.title).replace(/^\s+|\s+$/g, "") || "(no title)",
     location: plainText(raw.location),
     description: plainText(raw.description),
     calendar: plainText(raw.calendar),
+    feedId: String(raw.feedId || ""),
     color: String(raw.color || ""),
+    url: validWebUrl(raw.url),
+    organizer: plainText(raw.organizer),
+    attendees: attendees,
+    recurring: raw.recurring === true,
+    sourceStart: parseStamp(raw.sourceStart),
+    sourceEnd: parseStamp(raw.sourceEnd),
+    sourceTimezone: plainText(raw.sourceTimezone),
+    secondaryStart: parseStamp(raw.secondaryStart),
+    secondaryEnd: parseStamp(raw.secondaryEnd),
+    secondaryTimezone: plainText(raw.secondaryTimezone),
     cancelled: String(raw.status || "").toUpperCase() === "CANCELLED",
     allDay: allDay,
     start: start,
@@ -173,6 +319,8 @@ function parseEvent(raw) {
     endMs: end.getTime(),
     multiDay: keyForDate(start) !== keyForDate(lastDate)
   }
+  event.meetingLink = meetingLinkOf(event)
+  return event
 }
 
 function reminderKey(event) {
@@ -181,11 +329,34 @@ function reminderKey(event) {
 }
 
 function reminderMinutes(event, overrides, fallback) {
+  var values = reminderMinutesList(event, overrides, [fallback], null)
+  return values.length ? values[0] : -1
+}
+
+function normalizeMinuteList(value, fallback) {
+  if (value === false || value === "off") return []
+  var source = value
+  if (source === undefined || source === null || source === "") source = fallback
+  if (!Array.isArray(source)) source = [source]
+  var unique = {}
+  var out = []
+  for (var i = 0; i < source.length; i++) {
+    var parsed = parseInt(source[i], 10)
+    if (!isFinite(parsed)) continue
+    parsed = Math.max(1, Math.min(10080, parsed))
+    if (!unique[parsed]) {
+      unique[parsed] = true
+      out.push(parsed)
+    }
+  }
+  out.sort(function (a, b) { return b - a })
+  return out
+}
+
+function reminderMinutesList(event, overrides, fallback, feedDefault) {
   var value = overrides ? overrides[reminderKey(event)] : undefined
-  if (value === false || value === "off") return -1
-  if (value === undefined || value === null || value === "") return fallback
-  var parsed = parseInt(value, 10)
-  return isFinite(parsed) ? Math.max(1, Math.min(10080, parsed)) : fallback
+  var inherited = feedDefault === undefined || feedDefault === null ? fallback : [feedDefault]
+  return normalizeMinuteList(value, inherited)
 }
 
 function parseEvents(list) {
@@ -264,6 +435,22 @@ function nextUpcoming(events, now) {
   return best
 }
 
+function currentEvent(events, now) {
+  var stamp = now.getTime()
+  var best = null
+  for (var i = 0; events && i < events.length; i++) {
+    var event = events[i]
+    if (event.cancelled || event.allDay || event.startMs > stamp || event.endMs <= stamp) continue
+    if (!best || event.endMs < best.endMs) best = event
+  }
+  return best
+}
+
+function eventProgress(event, now) {
+  if (!event || event.allDay || event.endMs <= event.startMs) return 0
+  return Math.max(0, Math.min(1, (now.getTime() - event.startMs) / (event.endMs - event.startMs)))
+}
+
 function allDayOn(buckets, key) {
   var out = []
   var list = eventsOn(buckets, key)
@@ -278,7 +465,7 @@ function timedOn(buckets, key) {
   return out
 }
 
-function relativeLabel(event, now) {
+function relativeLabel(event, now, language) {
   if (!event) return ""
   var stamp = now.getTime()
   var today = startOfDay(now).getTime()
@@ -286,28 +473,29 @@ function relativeLabel(event, now) {
   var dayGap = Math.round((eventDay - today) / MS_PER_DAY)
 
   if (event.allDay) {
-    if (dayGap > 0) return dayGap === 1 ? "tomorrow" : "in " + dayGap + " days"
-    if (allDayEndMs(event) <= stamp) return "ended"
+    if (dayGap > 0) return dayGap === 1 ? text("tomorrow", language) : (language === "sv" ? "om " + dayGap + " dagar" : "in " + dayGap + " days")
+    if (allDayEndMs(event) <= stamp) return text("ended", language)
     var lastDay = startOfDay(event.lastDate).getTime()
     var remaining = Math.round((lastDay - today) / MS_PER_DAY)
-    if (remaining <= 0) return "today"
-    return remaining === 1 ? "until tomorrow" : remaining + " days left"
+    if (remaining <= 0) return text("today", language)
+    return remaining === 1 ? (language === "sv" ? "till imorgon" : "until tomorrow")
+      : (language === "sv" ? remaining + " dagar kvar" : remaining + " days left")
   }
 
-  if (event.startMs <= stamp && event.endMs > stamp) return "now"
+  if (event.startMs <= stamp && event.endMs > stamp) return text("now", language)
 
   var minutes = Math.round((event.startMs - stamp) / MS_PER_MINUTE)
-  if (minutes < 0) return "ended"
-  if (minutes < 1) return "starting"
-  if (minutes < 60) return "in " + minutes + " min"
+  if (minutes < 0) return text("ended", language)
+  if (minutes < 1) return text("starting", language)
+  if (minutes < 60) return language === "sv" ? "om " + minutes + " min" : "in " + minutes + " min"
 
   if (dayGap === 0) {
     var hours = Math.floor(minutes / 60)
     var rest = minutes % 60
-    return "in " + hours + " h" + (rest ? " " + rest + " min" : "")
+    return (language === "sv" ? "om " : "in ") + hours + " h" + (rest ? " " + rest + " min" : "")
   }
-  if (dayGap === 1) return "tomorrow"
-  if (dayGap <= 30) return "in " + dayGap + " days"
+  if (dayGap === 1) return text("tomorrow", language)
+  if (dayGap <= 30) return language === "sv" ? "om " + dayGap + " dagar" : "in " + dayGap + " days"
   return ""
 }
 
@@ -438,6 +626,34 @@ function upcoming(events, now) {
   return out
 }
 
+function eventMatches(event, query) {
+  var needle = String(query || "").replace(/^\s+|\s+$/g, "").toLowerCase()
+  if (!needle) return true
+  var values = [event.title, event.location, event.description, event.calendar,
+    event.organizer, event.attendees ? event.attendees.join(" ") : ""]
+  return values.join(" ").toLowerCase().indexOf(needle) >= 0
+}
+
+function eventInScope(event, scope, now, weekStart) {
+  if (!scope || scope === "All") return true
+  var first = scope === "Today" ? startOfDay(now)
+    : weekDays(now, weekStart, "")[0].date
+  var last = scope === "Today" ? addDays(first, 1) : addDays(first, 7)
+  var eventEnd = event.allDay ? allDayEndMs(event) : event.endMs
+  return event.startMs < last.getTime() && eventEnd > first.getTime()
+}
+
+function filterEvents(events, query, visibleFeeds, scope, now, weekStart) {
+  var out = []
+  for (var i = 0; events && i < events.length; i++) {
+    var event = events[i]
+    if (visibleFeeds && visibleFeeds[event.feedId] === false) continue
+    if (!eventInScope(event, scope, now || new Date(), weekStart)) continue
+    if (eventMatches(event, query)) out.push(event)
+  }
+  return out
+}
+
 function groupByMonth(events) {
   var groups = []
   var current = null
@@ -546,12 +762,20 @@ if (typeof module !== "undefined") {
     weekNumberOf: weekNumberOf, startOfDay: startOfDay, addDays: addDays,
     parseStamp: parseStamp, parseEvent: parseEvent, parseEvents: parseEvents,
     reminderKey: reminderKey, reminderMinutes: reminderMinutes,
+    reminderMinutesList: reminderMinutesList, normalizeMinuteList: normalizeMinuteList,
     bucketByDay: bucketByDay, eventsOn: eventsOn, allDayOn: allDayOn, timedOn: timedOn,
-    nextUpcoming: nextUpcoming, relativeLabel: relativeLabel,
+    nextUpcoming: nextUpcoming, currentEvent: currentEvent, eventProgress: eventProgress,
+    relativeLabel: relativeLabel,
     upcoming: upcoming, groupByMonth: groupByMonth, hasEnded: hasEnded,
     daySegment: daySegment, layoutDay: layoutDay, weekLayout: weekLayout,
     visibleHours: visibleHours, minutesOfDay: minutesOfDay,
     parseTime: parseTime, nextSlot: nextSlot, plainText: plainText,
+    resolvedLanguage: resolvedLanguage, text: text, formatTime: formatTime,
+    viewLabel: viewLabel, viewFromLabel: viewFromLabel,
+    scopeLabel: scopeLabel, scopeFromLabel: scopeFromLabel,
+    barModeLabel: barModeLabel, barModeFromLabel: barModeFromLabel,
+    validWebUrl: validWebUrl, meetingLinkOf: meetingLinkOf,
+    eventMatches: eventMatches, eventInScope: eventInScope, filterEvents: filterEvents,
     readPayload: readPayload, firstFeedError: firstFeedError, emptyState: emptyState
   }
 }

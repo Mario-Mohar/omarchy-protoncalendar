@@ -27,6 +27,11 @@ DTSTART;TZID=Europe/Stockholm:20260817T090000
 DTEND;TZID=Europe/Stockholm:20260817T100000
 SUMMARY:Standup
 LOCATION:Kontoret
+DESCRIPTION:Daily sync https://meet.proton.me/team-room
+ORGANIZER:mailto:owner@example.com
+ATTENDEE:mailto:alice@example.com
+ATTENDEE:mailto:bob@example.com
+URL:https://meet.proton.me/team-room
 END:VEVENT
 BEGIN:VEVENT
 UID:allday-single@test

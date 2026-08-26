@@ -19,19 +19,38 @@ Item {
   property bool everLoaded: false
 
   readonly property string feedError: Model.firstFeedError(feeds)
+  readonly property var nextRefreshAt: generatedAt
+    ? new Date(generatedAt.getTime() + refreshIntervalSec * 1000) : null
 
   readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 900, 60, 86400)
   readonly property int dayStartHour: intSetting("dayStartHour", 7, 0, 23)
   readonly property int dayEndHour: Math.max(dayStartHour + 1, intSetting("dayEndHour", 22, 1, 24))
+  readonly property int quickAddDurationMinutes: intSetting("quickAddDurationMinutes", 60, 5, 1440)
   readonly property string feedsFile: stringSetting("feedsFile", "")
+  readonly property string language: Model.resolvedLanguage(stringSetting("language", "System"), Qt.locale().name)
+  readonly property string timeFormatSetting: stringSetting("timeFormat", "System")
+  readonly property string timeFormat: timeFormatSetting === "System"
+    ? (String(Qt.locale().timeFormat(Locale.ShortFormat)).indexOf("AP") >= 0
+      || String(Qt.locale().timeFormat(Locale.ShortFormat)).indexOf("ap") >= 0
+      ? "12-hour" : "24-hour")
+    : timeFormatSetting
+  readonly property string secondaryTimeZone: stringSetting("secondaryTimeZone", "")
   readonly property bool notificationsEnabled: boolSetting("notificationsEnabled", true)
   readonly property bool notificationSoundEnabled: boolSetting("notificationSoundEnabled", true)
   readonly property string notificationSound: normalizedSound(stringSetting("notificationSound", "Alarm"))
   readonly property int reminderMinutes: intSetting("reminderMinutes", 60, 1, 10080)
+  readonly property var reminderMinutesList: Model.normalizeMinuteList(
+    settings ? settings.reminderMinutesList : null, [reminderMinutes])
+  readonly property bool allDayNotificationsEnabled: boolSetting("allDayNotificationsEnabled", false)
+  readonly property int allDayReminderDays: intSetting("allDayReminderDays", 1, 0, 30)
+  readonly property int allDayReminderHour: intSetting("allDayReminderHour", 9, 0, 23)
   readonly property var reminderOverrides: settings && settings.reminderOverrides
     ? settings.reminderOverrides : ({})
   property var firedReminders: ({})
   property var testEvent: null
+  property var notificationQueue: []
+  property string notificationPayload: ""
+  property string copyPayload: ""
 
   SystemClock {
     id: clock
@@ -41,7 +60,7 @@ Item {
   readonly property string todayKey: Model.keyForDate(now)
 
   readonly property var nextEvent: Model.nextUpcoming(events, now)
-  readonly property string nextRelative: Model.relativeLabel(nextEvent, now)
+  readonly property string nextRelative: Model.relativeLabel(nextEvent, now, language)
   readonly property var todayEvents: Model.eventsOn(buckets, todayKey)
 
   function scriptPath(name) {
@@ -70,6 +89,19 @@ Item {
     return v === true || String(v).toLowerCase() === "true" || String(v) === "1"
   }
 
+  function feedForEvent(event) {
+    if (!event) return null
+    for (var i = 0; i < feeds.length; i++)
+      if (feeds[i] && feeds[i].id === event.feedId) return feeds[i]
+    return null
+  }
+
+  function webUrlFor(event) {
+    var date = event && event.start ? event.start : now
+    return "https://calendar.proton.me/u/0/week/" + date.getFullYear() + "/"
+      + (date.getMonth() + 1) + "/" + date.getDate()
+  }
+
   function normalizedSound(value) {
     var sounds = { "Gentle": true, "Bell": true, "Chime": true, "Alarm": true }
     return sounds[value] ? value : "Alarm"
@@ -95,25 +127,66 @@ Item {
     var stamp = now.getTime()
     for (var i = 0; i < events.length; i++) {
       var event = events[i]
-      if (!event || event.cancelled || event.allDay || event.startMs <= stamp) continue
-      var minutes = event === testEvent ? 1
-        : Model.reminderMinutes(event, reminderOverrides, reminderMinutes)
-      if (minutes < 0) continue
-      var target = event.startMs - minutes * 60000
-      if (stamp < target || stamp >= target + 300000) continue
-      var key = Model.reminderKey(event) + ":" + minutes
-      if (firedReminders[key]) continue
-      var next = {}
-      for (var existing in firedReminders) next[existing] = firedReminders[existing]
-      next[key] = true
-      firedReminders = next
-      var when = Qt.formatDateTime(event.start, "HH:mm")
-      var body = "Starts at " + when + (event.location ? " · " + event.location : "")
-      Quickshell.execDetached(["notify-send", "--app-name=Proton Calendar",
-        "--icon=" + assetPath("proton-calendar.svg"), event.title, body])
-      if (notificationSoundEnabled)
-        previewSound(notificationSound)
+      if (!event || event.cancelled) continue
+      var feed = feedForEvent(event)
+      if (feed && feed.notificationsEnabled === false) continue
+      var targets = []
+      if (event.allDay) {
+        if (!allDayNotificationsEnabled) continue
+        var allDayTarget = new Date(event.start.getFullYear(), event.start.getMonth(),
+          event.start.getDate() - allDayReminderDays, allDayReminderHour, 0, 0, 0)
+        targets.push({ key: "all-day", stamp: allDayTarget.getTime() })
+      } else {
+        if (event.startMs <= stamp) continue
+        var minutesList = event === testEvent ? [1] : Model.reminderMinutesList(
+          event, reminderOverrides, reminderMinutesList,
+          feed ? feed.reminderMinutes : null)
+        for (var m = 0; m < minutesList.length; m++)
+          targets.push({ key: String(minutesList[m]), stamp: event.startMs - minutesList[m] * 60000 })
+      }
+      for (var t = 0; t < targets.length; t++) {
+        var target = targets[t]
+        if (stamp < target.stamp || stamp >= target.stamp + 300000) continue
+        var key = Model.reminderKey(event) + ":" + target.key
+        if (firedReminders[key]) continue
+        var next = {}
+        for (var existing in firedReminders) next[existing] = firedReminders[existing]
+        next[key] = true
+        firedReminders = next
+        var when = event.allDay ? Model.text("allDay", language)
+          : Model.formatTime(event.start, timeFormat)
+        var body = when + (event.location ? " · " + event.location : "")
+        sendNotification(event, body, 0)
+        if (notificationSoundEnabled) previewSound(notificationSound)
+      }
     }
+  }
+
+  function sendNotification(event, body, delaySeconds) {
+    var payload = JSON.stringify({
+      title: event ? event.title : "Proton Calendar",
+      body: String(body || ""),
+      icon: assetPath("proton-calendar.svg"),
+      url: webUrlFor(event),
+      language: language,
+      delaySeconds: Math.max(0, Number(delaySeconds || 0))
+    })
+    notificationQueue = notificationQueue.concat([payload])
+    runNextNotification()
+  }
+
+  function runNextNotification() {
+    if (notificationProcess.running || notificationQueue.length === 0) return
+    notificationPayload = notificationQueue[0]
+    notificationQueue = notificationQueue.slice(1)
+    notificationProcess.command = ["python3", scriptPath("protoncal-notify")]
+    notificationProcess.running = true
+  }
+
+  function snoozeEvent(event, minutes) {
+    if (!event) return
+    sendNotification(event, Model.text("starting", language) + " · "
+      + Model.formatTime(event.start, timeFormat), Math.max(1, minutes) * 60)
   }
 
   function scheduleTestReminder() {
@@ -138,6 +211,7 @@ Item {
   function syncArgs(extra) {
     var args = ["python3", scriptPath("protoncal-sync")]
     if (feedsFile !== "") args = args.concat(["--feeds", feedsFile])
+    if (secondaryTimeZone !== "") args = args.concat(["--secondary-time-zone", secondaryTimeZone])
     return extra ? args.concat(extra) : args
   }
 
@@ -187,19 +261,46 @@ Item {
     feedProcess.running = true
   }
 
-  function removeFeed(url) {
+  function removeFeed(id) {
     if (feedProcess.running) return
-    feedProcess.environment = { "PROTONCAL_FEED_URL": String(url) }
-    feedProcess.command = syncArgs(["--remove-feed-env"])
+    feedProcess.environment = ({})
+    feedProcess.command = syncArgs(["--remove-feed-id", String(id)])
     feedProcess.running = true
   }
 
-  function openDay(dateKey, title, time, view) {
+  function updateFeed(id, values) {
+    if (feedProcess.running) return
+    var patch = { id: String(id) }
+    for (var key in values) patch[key] = values[key]
+    feedProcess.environment = { "PROTONCAL_FEED_UPDATE": JSON.stringify(patch) }
+    feedProcess.command = syncArgs(["--update-feed-env"])
+    feedProcess.running = true
+  }
+
+  function openDay(dateKey, title, time, view, clipboardText) {
+    if (openProcess.running) return
     var args = [scriptPath("protoncal-open"), "--view", String(view || "week")]
     if (dateKey) args = args.concat(["--date", String(dateKey)])
-    if (title) args = args.concat(["--title", String(title)])
     if (time) args = args.concat(["--time", String(time)])
-    Quickshell.execDetached(args)
+    if (title) args = args.concat(["--title-env", "--clipboard-env", "--prefill"])
+    openProcess.environment = {
+      "PROTONCAL_TITLE": String(title || ""),
+      "PROTONCAL_CLIPBOARD_TEXT": String(clipboardText || title || "")
+    }
+    openProcess.command = args
+    openProcess.running = true
+  }
+
+  function copyText(value) {
+    if (copyProcess.running) return
+    copyPayload = String(value || "")
+    copyProcess.command = ["python3", scriptPath("protoncal-copy")]
+    copyProcess.running = true
+  }
+
+  function openUrl(value) {
+    var url = Model.validWebUrl(value)
+    if (url) Qt.openUrlExternally(url)
   }
 
   Process {
@@ -228,6 +329,32 @@ Item {
     stdout: StdioCollector { id: feedStdout; waitForEnd: true }
     onExited: function (exitCode) {
       if (exitCode === 0) root.apply(String(feedStdout.text || ""))
+    }
+  }
+
+  Process {
+    id: notificationProcess
+    command: []
+    stdinEnabled: true
+    onStarted: {
+      write(root.notificationPayload + "\n")
+      root.notificationPayload = ""
+    }
+    onExited: root.runNextNotification()
+  }
+
+  Process {
+    id: openProcess
+    command: []
+  }
+
+  Process {
+    id: copyProcess
+    command: []
+    stdinEnabled: true
+    onStarted: {
+      write(JSON.stringify(root.copyPayload) + "\n")
+      root.copyPayload = ""
     }
   }
 

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.itsmoorgrove.protoncalendar",
   "name": "Proton Calendar",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": "moorgrove",
   "license": "MIT",
   "description": "Proton Calendar in the Omarchy bar: next event, month grid, and week grid.",
@@ -29,15 +29,26 @@
     "defaultSection": "center",
     "defaults": {
       "refreshIntervalSec": 900,
-      "barLabel": "Title and time",
+      "barMode": "Countdown",
       "defaultView": "Month",
       "weekStartDay": "Sunday",
+      "language": "System",
+      "timeFormat": "System",
+      "secondaryTimeZone": "",
+      "showWeekNumbers": true,
       "dayStartHour": 7,
       "dayEndHour": 22,
+      "quickAddDurationMinutes": 60,
       "notificationsEnabled": true,
       "notificationSoundEnabled": true,
       "notificationSound": "Alarm",
       "reminderMinutes": 60,
+      "reminderMinutesList": [
+        60
+      ],
+      "allDayNotificationsEnabled": false,
+      "allDayReminderDays": 1,
+      "allDayReminderHour": 9,
       "feedsFile": ""
     },
     "schema": [
@@ -52,16 +63,19 @@
         "description": "How often the shared calendar feeds are re-fetched."
       },
       {
-        "key": "barLabel",
+        "key": "barMode",
         "type": "enum",
-        "label": "Bar label",
+        "label": "Bar display",
         "options": [
           "Off",
-          "Title",
-          "Title and time"
+          "Next event",
+          "Countdown",
+          "Today count",
+          "Current event",
+          "Privacy"
         ],
-        "defaultValue": "Title and time",
-        "description": "What the next event shows beside the bar mark. A vertical bar always shows the mark alone."
+        "defaultValue": "Countdown",
+        "description": "What appears beside the calendar icon. Privacy never exposes event titles."
       },
       {
         "key": "defaultView",
@@ -70,10 +84,46 @@
         "options": [
           "Month",
           "Week",
+          "Day",
           "Upcoming"
         ],
         "defaultValue": "Month",
         "description": "Which view the panel opens on. Upcoming is a dated list of everything ahead."
+      },
+      {
+        "key": "language",
+        "type": "enum",
+        "label": "Language",
+        "options": [
+          "System",
+          "English",
+          "Swedish"
+        ],
+        "defaultValue": "System"
+      },
+      {
+        "key": "timeFormat",
+        "type": "enum",
+        "label": "Clock format",
+        "options": [
+          "System",
+          "24-hour",
+          "12-hour"
+        ],
+        "defaultValue": "System"
+      },
+      {
+        "key": "secondaryTimeZone",
+        "type": "string",
+        "label": "Secondary time zone",
+        "defaultValue": "",
+        "description": "Optional IANA name such as Europe/London or UTC."
+      },
+      {
+        "key": "showWeekNumbers",
+        "type": "boolean",
+        "label": "Show week numbers",
+        "defaultValue": true
       },
       {
         "key": "weekStartDay",
@@ -103,6 +153,15 @@
         "max": 24,
         "step": 1,
         "defaultValue": 22
+      },
+      {
+        "key": "quickAddDurationMinutes",
+        "type": "integer",
+        "label": "Quick add duration (minutes)",
+        "min": 5,
+        "max": 1440,
+        "step": 5,
+        "defaultValue": 60
       },
       {
         "key": "notificationsEnabled",
@@ -140,6 +199,30 @@
         "step": 1,
         "defaultValue": 60,
         "description": "Default reminder time. Individual events can override it in the widget."
+      },
+      {
+        "key": "allDayNotificationsEnabled",
+        "type": "boolean",
+        "label": "All-day notifications",
+        "defaultValue": false
+      },
+      {
+        "key": "allDayReminderDays",
+        "type": "integer",
+        "label": "All-day reminder days before",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "defaultValue": 1
+      },
+      {
+        "key": "allDayReminderHour",
+        "type": "integer",
+        "label": "All-day reminder hour",
+        "min": 0,
+        "max": 23,
+        "step": 1,
+        "defaultValue": 9
       },
       {
         "key": "feedsFile",

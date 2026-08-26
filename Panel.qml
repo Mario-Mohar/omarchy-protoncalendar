@@ -23,38 +23,57 @@ Panel {
   property int viewYear: today.getFullYear()
   property int viewMonth: today.getMonth()
   property date viewWeek: today
+  property date viewDay: today
   property string selectedKey: todayKey
   property bool addOpen: false
   property bool settingsOpen: false
+  property string searchQuery: ""
+  property string searchScope: "All"
+  property var selectedEvent: null
 
   readonly property bool viewingMonth: view === "Month"
   readonly property bool viewingWeek: view === "Week"
+  readonly property bool viewingDay: view === "Day"
   readonly property bool viewingAgenda: view === "Upcoming"
 
-  readonly property var barLabelRing: ["Off", "Title", "Title and time"]
-  readonly property string barLabel: {
-    var current = String(setting("barLabel", "Title and time"))
-    return barLabelRing.indexOf(current) < 0 ? "Title and time" : current
+  readonly property var barModeRing: ["Off", "Next event", "Countdown", "Today count", "Current event", "Privacy"]
+  readonly property string barMode: {
+    var current = String(setting("barMode", ""))
+    if (barModeRing.indexOf(current) >= 0) return current
+    var legacy = String(setting("barLabel", "Title and time"))
+    return legacy === "Off" ? "Off" : (legacy === "Title" ? "Next event" : "Countdown")
   }
-  readonly property string nextBarLabel: barLabelRing[(barLabelRing.indexOf(barLabel) + 1) % barLabelRing.length]
+  readonly property string nextBarMode: barModeRing[(barModeRing.indexOf(barMode) + 1) % barModeRing.length]
   readonly property bool atToday: {
     if (viewingAgenda) return true
     if (viewingMonth) return viewYear === today.getFullYear() && viewMonth === today.getMonth()
+    if (viewingDay) return Model.keyForDate(viewDay) === todayKey
     return Model.keyForDate(Model.weekDays(viewWeek, weekStart, "")[0].date)
       === Model.keyForDate(Model.weekDays(today, weekStart, "")[0].date)
   }
 
   readonly property int weekStart: Model.normalizedWeekStart(setting("weekStartDay", "Sunday"), 0)
   readonly property string nextWeekStartLabel: Qt.locale().dayName(Model.toggledWeekStart(weekStart), Locale.LongFormat)
+  readonly property bool showWeekNumbers: {
+    var value = setting("showWeekNumbers", true)
+    return value === true || String(value).toLowerCase() === "true" || String(value) === "1"
+  }
+  readonly property string language: service ? service.language
+    : Model.resolvedLanguage(setting("language", "System"), Qt.locale().name)
+  readonly property string timeFormat: service ? service.timeFormat : String(setting("timeFormat", "System"))
 
-  readonly property var events: service ? service.events : []
-  readonly property var buckets: service ? service.buckets : ({})
+  readonly property var allEvents: service ? service.events : []
+  readonly property var events: Model.filterEvents(allEvents, searchQuery, null,
+    searchScope, service ? service.now : today, weekStart)
+  readonly property var buckets: Model.bucketByDay(events)
   readonly property var weeks: Model.monthGrid(viewYear, viewMonth, weekStart, todayKey)
   readonly property var weekdays: Model.weekdayOrder(weekStart)
   readonly property var weekDayList: Model.weekDays(viewWeek, weekStart, todayKey)
+  readonly property var dayList: Model.weekDays(viewDay, viewDay.getDay(), todayKey).slice(0, 1)
   readonly property var selectedEvents: Model.eventsOn(buckets, selectedKey)
   readonly property var nextEvent: service ? service.nextEvent : null
   readonly property int defaultReminderMinutes: service ? service.reminderMinutes : 60
+  readonly property var defaultReminderValues: service ? service.reminderMinutesList : [60]
   readonly property var reminderOverrides: service ? service.reminderOverrides : ({})
 
   readonly property bool configured: service ? service.configured : false
@@ -64,7 +83,10 @@ Panel {
     if (service.feedError !== "") return service.feedError
     if (service.stale) return "Showing the last good copy — refresh failed."
     if (!service.generatedAt) return ""
-    return "Updated " + Qt.formatDateTime(service.generatedAt, "HH:mm")
+    var result = "Updated " + Model.formatTime(service.generatedAt, timeFormat)
+    if (service.nextRefreshAt)
+      result += " · next " + Model.formatTime(service.nextRefreshAt, timeFormat)
+    return result
   }
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
@@ -74,10 +96,12 @@ Panel {
   readonly property string headingText: {
     if (viewingAgenda) {
       var count = agendaView.total
-      return count === 0 ? "Upcoming" : "Upcoming · " + count
+      return count === 0 ? Model.text("upcoming", language)
+        : Model.text("upcoming", language) + " · " + count
     }
+    if (viewingDay) return Qt.formatDate(viewDay, "dddd d MMMM yyyy")
     if (viewingMonth) return Qt.formatDate(new Date(viewYear, viewMonth, 1), "MMMM yyyy")
-    return "Week " + Model.weekNumberOf(viewWeek, weekStart) + " · "
+    return Model.text("week", language) + " " + Model.weekNumberOf(viewWeek, weekStart) + " · "
       + Qt.formatDate(weekDayList[0].date, "MMM yyyy")
   }
 
@@ -94,6 +118,7 @@ Panel {
     setCenterHoverRevealSuppressed(false)
     root.addOpen = false
     root.settingsOpen = false
+    root.selectedEvent = null
     root.controller.hide()
   }
 
@@ -122,6 +147,7 @@ Panel {
     root.viewYear = today.getFullYear()
     root.viewMonth = today.getMonth()
     root.viewWeek = today
+    root.viewDay = today
     root.selectedKey = todayKey
   }
 
@@ -131,15 +157,19 @@ Panel {
       var next = Model.stepMonth(viewYear, viewMonth, delta)
       root.viewYear = next.year
       root.viewMonth = next.month
-    } else {
+    } else if (viewingWeek) {
       root.viewWeek = Model.addDays(viewWeek, delta * 7)
+    } else if (viewingDay) {
+      root.viewDay = Model.addDays(viewDay, delta)
+      root.selectedKey = Model.keyForDate(root.viewDay)
     }
   }
 
   function stepLarge(delta) {
     if (viewingAgenda) return
     if (viewingMonth) step(delta * 12)
-    else root.viewWeek = Model.addDays(viewWeek, delta * 28)
+    else if (viewingWeek) root.viewWeek = Model.addDays(viewWeek, delta * 28)
+    else if (viewingDay) step(delta * 7)
   }
 
   function setView(next) {
@@ -147,6 +177,7 @@ Panel {
     var wasAgenda = root.viewingAgenda
     root.view = next
     if (next === "Week") root.viewWeek = Model.parseStamp(selectedKey) || today
+    else if (next === "Day") root.viewDay = Model.parseStamp(selectedKey) || today
     else if (next === "Month") {
       var anchor = Model.parseStamp(selectedKey) || (wasAgenda ? today : viewWeek)
       root.viewYear = anchor.getFullYear()
@@ -156,7 +187,7 @@ Panel {
   }
 
   function cycleBarLabel() {
-    persistSettings({ barLabel: root.nextBarLabel })
+    persistSettings({ barMode: root.nextBarMode })
   }
 
   function persistSettings(values) {
@@ -202,13 +233,17 @@ Panel {
   }
 
   function openEvent(event) {
-    if (!service || !event) return
-    service.openDay(Model.keyForDate(event.start), "", "", "week")
+    root.selectedEvent = event || null
   }
 
-  function submitAdd(title, time, allDay) {
+  function openEventInProton(event) {
+    if (!service || !event) return
+    service.openDay(Model.keyForDate(event.start), "", "", "week", "")
+  }
+
+  function submitAdd(title, time, endTime, allDay, calendar, location, clipboardText) {
     if (!service) return
-    service.openDay(selectedKey, title, allDay ? "" : time, "week")
+    service.openDay(selectedKey, title, allDay ? "" : time, "week", clipboardText)
     root.addOpen = false
   }
 
@@ -231,7 +266,7 @@ Panel {
     open: root.opened
     centerOnBar: true
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(620))
+    contentWidth: panel.fittedContentWidth(Style.space(680))
     contentHeight: panel.fittedContentHeight(content.implicitHeight)
 
     PanelKeyCatcher {
@@ -254,12 +289,14 @@ Panel {
         else if (t === "w" || t === "W") root.toggleWeekStart()
         else if (t === "m" || t === "M") root.setView("Month")
         else if (t === "e" || t === "E") root.setView("Week")
+        else if (t === "d" || t === "D") root.setView("Day")
         else if (t === "u" || t === "U") root.setView("Upcoming")
         else if (t === "b" || t === "B") root.cycleBarLabel()
         else if (t === "s" || t === "S") root.settingsOpen = !root.settingsOpen
         else if (t === "r" || t === "R") { if (root.service) root.service.refresh() }
         else if (t === "n" || t === "N" || t === "a" || t === "A") root.addOpen = true
         else if (t === "o" || t === "O") { if (root.service) root.service.openDay(root.selectedKey, "", "", "week") }
+        else if (t === "/") searchField.forceActiveFocus()
       }
 
       Flickable {
@@ -281,7 +318,8 @@ Panel {
             visible: root.configured
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
-            title: root.nextEvent ? root.nextEvent.title : "Nothing coming up"
+            title: root.nextEvent ? root.nextEvent.title
+              : (root.language === "sv" ? "Inget kommande" : "Nothing coming up")
             meta: {
               if (!root.nextEvent) return ""
               var relative = root.service ? root.service.nextRelative : ""
@@ -319,13 +357,17 @@ Panel {
             feeds: root.service ? root.service.feeds : []
             configured: root.configured
             busy: root.service ? root.service.syncing : false
+            language: root.language
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
             onAddRequested: function (url) {
               if (root.service) root.service.addFeed(url, "")
             }
-            onRemoveRequested: function (url) {
-              if (root.service) root.service.removeFeed(url)
+            onRemoveRequested: function (id) {
+              if (root.service) root.service.removeFeed(id)
+            }
+            onUpdateRequested: function (id, values) {
+              if (root.service) root.service.updateFeed(id, values)
             }
           }
 
@@ -336,7 +378,17 @@ Panel {
             notificationSoundEnabled: root.service ? root.service.notificationSoundEnabled : true
             notificationSound: root.service ? root.service.notificationSound : "Alarm"
             reminderMinutes: root.defaultReminderMinutes
+            reminderValues: root.defaultReminderValues
             weekStart: root.weekStart
+            languageSetting: String(root.setting("language", "System"))
+            resolvedLanguage: root.language
+            timeFormat: root.service ? root.service.timeFormatSetting : "System"
+            secondaryTimeZone: root.service ? root.service.secondaryTimeZone : ""
+            showWeekNumbers: root.showWeekNumbers
+            barMode: root.barMode
+            allDayNotificationsEnabled: root.service ? root.service.allDayNotificationsEnabled : false
+            allDayReminderDays: root.service ? root.service.allDayReminderDays : 1
+            allDayReminderHour: root.service ? root.service.allDayReminderHour : 9
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
             onSettingsRequested: function (enabled, soundEnabled, sound, minutes) {
@@ -344,6 +396,11 @@ Panel {
             }
             onWeekStartRequested: function (day) {
               root.persistSettings({ weekStartDay: Model.weekStartSettingName(day) })
+            }
+            onPreferencesRequested: function (values) {
+              root.persistSettings(values)
+              if (values.secondaryTimeZone !== undefined && root.service)
+                Qt.callLater(root.service.refresh)
             }
             onSoundPreviewRequested: function (sound) {
               if (root.service) root.service.previewSound(sound)
@@ -358,6 +415,67 @@ Panel {
             visible: root.configured && root.settingsOpen
           }
 
+          Row {
+            width: parent.width
+            visible: root.configured
+            height: Style.space(32)
+            spacing: Style.space(6)
+
+            TextField {
+              id: searchField
+              width: parent.width - scopeSwitch.width - clearSearch.width - searchCount.width - Style.space(18)
+              height: parent.height
+              placeholderText: Model.text("search", root.language)
+              foreground: root.contentForeground
+              font.family: root.contentFontFamily
+              onTextChanged: root.searchQuery = text
+              Keys.onEscapePressed: {
+                text = ""
+                keyCatcher.forceActiveFocus()
+              }
+            }
+
+            ButtonGroup {
+              id: scopeSwitch
+              height: parent.height
+              width: Style.space(180)
+              options: [Model.scopeLabel("All", root.language),
+                Model.scopeLabel("Today", root.language), Model.scopeLabel("Week", root.language)]
+              value: Model.scopeLabel(root.searchScope, root.language)
+              foreground: root.contentForeground
+              background: Color.background
+              fontFamily: root.contentFontFamily
+              fontSize: Style.font.caption
+              onChanged: function (value) { root.searchScope = Model.scopeFromLabel(value) }
+            }
+
+            Text {
+              id: searchCount
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.searchQuery === "" && root.searchScope === "All"
+                ? "" : root.events.length + "/" + root.allEvents.length
+              color: root.dim
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            Button {
+              id: clearSearch
+              height: parent.height
+              text: root.language === "sv" ? "Rensa" : "Clear"
+              bordered: true
+              enabled: root.searchQuery !== "" || root.searchScope !== "All"
+              opacity: enabled ? 1.0 : 0.4
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+              fontSize: Style.font.caption
+              onClicked: {
+                searchField.text = ""
+                root.searchScope = "All"
+              }
+            }
+          }
+
           Item {
             width: parent.width
             visible: root.configured
@@ -368,33 +486,47 @@ Panel {
               anchors.left: parent.left
               anchors.leftMargin: Style.space(1)
               anchors.verticalCenter: parent.verticalCenter
-              options: ["Month", "Week", "Upcoming"]
-              value: root.view
+              options: [Model.viewLabel("Month", root.language),
+                Model.viewLabel("Week", root.language), Model.viewLabel("Day", root.language),
+                Model.viewLabel("Upcoming", root.language)]
+              value: Model.viewLabel(root.view, root.language)
               foreground: root.contentForeground
               background: Color.background
               fontFamily: root.contentFontFamily
               fontSize: Style.font.caption
-              onChanged: function (value) { root.setView(value) }
+              onChanged: function (value) { root.setView(Model.viewFromLabel(value, root.view)) }
             }
 
-            Row {
+            Item {
               id: centerRow
-              anchors.centerIn: parent
-              spacing: Style.space(4)
+              anchors.left: viewSwitch.right
+              anchors.leftMargin: Style.space(10)
+              anchors.right: actionsRow.left
+              anchors.rightMargin: Style.space(10)
+              anchors.verticalCenter: parent.verticalCenter
+              height: Math.max(previousButton.implicitHeight, nextButton.implicitHeight,
+                headingLabel.implicitHeight)
 
               PanelActionButton {
+                id: previousButton
+                anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 iconText: "󰅁"
                 visible: !root.viewingAgenda
-                tooltipText: root.viewingMonth ? "Previous month" : "Previous week"
+                tooltipText: root.viewingMonth ? "Previous month"
+                  : (root.viewingWeek ? "Previous week" : "Previous day")
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 onClicked: root.step(-1)
               }
 
               Text {
+                id: headingLabel
                 anchors.verticalCenter: parent.verticalCenter
-                width: Style.space(150)
+                anchors.left: previousButton.right
+                anchors.leftMargin: Style.space(4)
+                anchors.right: nextButton.left
+                anchors.rightMargin: Style.space(4)
                 horizontalAlignment: Text.AlignHCenter
                 text: root.headingText
                 color: root.contentForeground
@@ -405,10 +537,13 @@ Panel {
               }
 
               PanelActionButton {
+                id: nextButton
+                anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 iconText: "󰅂"
                 visible: !root.viewingAgenda
-                tooltipText: root.viewingMonth ? "Next month" : "Next week"
+                tooltipText: root.viewingMonth ? "Next month"
+                  : (root.viewingWeek ? "Next week" : "Next day")
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 onClicked: root.step(1)
@@ -423,10 +558,8 @@ Panel {
 
               PanelActionButton {
                 anchors.verticalCenter: parent.verticalCenter
-                iconText: root.barLabel === "Off" ? "󰛐" : "󰛑"
-                tooltipText: root.nextBarLabel === "Off"
-                  ? "Bar: icon only"
-                  : "Bar: show " + root.nextBarLabel.toLowerCase()
+                iconText: root.barMode === "Off" ? "󰛐" : "󰛑"
+                tooltipText: "Bar: " + root.nextBarMode.toLowerCase()
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 onClicked: root.cycleBarLabel()
@@ -479,7 +612,8 @@ Panel {
             width: parent.width
             visible: root.configured
             height: root.viewingAgenda ? agendaView.implicitHeight
-              : (root.viewingMonth ? monthView.implicitHeight : weekView.implicitHeight)
+              : (root.viewingMonth ? monthView.implicitHeight
+                : (root.viewingDay ? dayView.implicitHeight : weekView.implicitHeight))
 
             WheelHandler {
               enabled: !root.viewingAgenda
@@ -501,9 +635,11 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               nextWeekStartLabel: root.nextWeekStartLabel
+              showWeekNumbers: root.showWeekNumbers
               onDaySelected: function (key) { root.selectedKey = key }
               onDayActivated: function (key) {
-                if (root.service) root.service.openDay(key, "", "", "week")
+                root.selectedKey = key
+                root.setView("Day")
               }
               onWeekStartToggled: root.toggleWeekStart()
             }
@@ -520,6 +656,8 @@ Panel {
               fontFamily: root.contentFontFamily
               defaultReminderMinutes: root.defaultReminderMinutes
               reminderOverrides: root.reminderOverrides
+              timeFormat: root.timeFormat
+              language: root.language
               onEventActivated: function (event) { root.openEvent(event) }
               onReminderChanged: function (event, value) { root.setEventReminder(event, value) }
             }
@@ -536,11 +674,47 @@ Panel {
               todayKey: root.todayKey
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
+              timeFormat: root.timeFormat
               onEventActivated: function (event) { root.openEvent(event) }
               onDayActivated: function (key) {
                 root.selectedKey = key
-                root.setView("Month")
+                root.setView("Day")
               }
+            }
+
+            WeekView {
+              id: dayView
+              anchors.horizontalCenter: parent.horizontalCenter
+              visible: root.viewingDay
+              width: content.width
+              dayMode: true
+              days: root.dayList
+              buckets: root.buckets
+              dayStartHour: root.service ? root.service.dayStartHour : 7
+              dayEndHour: root.service ? root.service.dayEndHour : 22
+              now: root.service ? root.service.now : new Date()
+              todayKey: root.todayKey
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+              timeFormat: root.timeFormat
+              onEventActivated: function (event) { root.openEvent(event) }
+              onDayActivated: function (key) { root.selectedKey = key }
+            }
+          }
+
+          EventDetails {
+            width: parent.width
+            event: root.selectedEvent
+            foreground: root.contentForeground
+            fontFamily: root.contentFontFamily
+            language: root.language
+            timeFormat: root.timeFormat
+            onCloseRequested: root.selectedEvent = null
+            onOpenRequested: function (event) { root.openEventInProton(event) }
+            onJoinRequested: function (url) { if (root.service) root.service.openUrl(url) }
+            onCopyRequested: function (value) { if (root.service) root.service.copyText(value) }
+            onSnoozeRequested: function (event, minutes) {
+              if (root.service) root.service.snoozeEvent(event, minutes)
             }
           }
 
@@ -564,7 +738,7 @@ Panel {
             Text {
               width: parent.width
               visible: root.selectedEvents.length === 0
-              text: "Nothing scheduled."
+              text: Model.text("noEvents", root.language)
               color: root.dim
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.bodySmall
@@ -579,6 +753,12 @@ Panel {
                 event: modelData
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
+                timeFormat: root.timeFormat
+                language: root.language
+                reminderValues: Model.reminderMinutesList(modelData, root.reminderOverrides,
+                  root.defaultReminderValues,
+                  root.service && root.service.feedForEvent(modelData)
+                    ? root.service.feedForEvent(modelData).reminderMinutes : null)
                 reminderMinutes: Model.reminderMinutes(modelData, root.reminderOverrides, root.defaultReminderMinutes) < 0
                   ? root.defaultReminderMinutes
                   : Model.reminderMinutes(modelData, root.reminderOverrides, root.defaultReminderMinutes)
@@ -599,7 +779,11 @@ Panel {
             today: root.today
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
-            onSubmitted: function (title, time, allDay) { root.submitAdd(title, time, allDay) }
+            language: root.language
+            defaultDurationMinutes: root.service ? root.service.quickAddDurationMinutes : 60
+            onSubmitted: function (title, time, endTime, allDay, calendar, location, clipboardText) {
+              root.submitAdd(title, time, endTime, allDay, calendar, location, clipboardText)
+            }
             onDismissed: root.addOpen = false
           }
 
@@ -624,7 +808,7 @@ Panel {
             Text {
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              text: "Open Proton →"
+              text: Model.text("openProton", root.language) + " →"
               color: webMouse.containsMouse
                 ? Style.hoverStateColor(root.contentForeground, Color.accent)
                 : root.dim
@@ -636,7 +820,7 @@ Panel {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: { if (root.service) root.service.openDay(root.selectedKey, "", "", "week") }
+                onClicked: { if (root.service) root.service.openDay(root.selectedKey, "", "", "week", "") }
               }
             }
           }

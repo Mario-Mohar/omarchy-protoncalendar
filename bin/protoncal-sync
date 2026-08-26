@@ -7,6 +7,7 @@ import multiprocessing
 import os
 import re
 import resource
+import shutil
 import socket
 import subprocess
 import sys
@@ -40,7 +41,7 @@ class ExpansionAborted(Exception):
     pass
 
 
-def _expand_worker(text, feed, window_start, window_end, tz, out_queue):
+def _expand_worker(text, feed, window_start, window_end, tz, secondary_tz, out_queue):
     try:
         resource.setrlimit(resource.RLIMIT_CPU, (EXPANSION_CPU_LIMIT_SEC, EXPANSION_CPU_LIMIT_SEC))
         resource.setrlimit(resource.RLIMIT_AS, (EXPANSION_MEMORY_LIMIT_BYTES, EXPANSION_MEMORY_LIMIT_BYTES))
@@ -63,6 +64,7 @@ def _expand_worker(text, feed, window_start, window_end, tz, out_queue):
             start = component.get("DTSTART")
             if start is None:
                 continue
+            start_property = start
             start = start.dt
             end = component.get("DTEND")
             end = end.dt if end is not None else None
@@ -71,10 +73,17 @@ def _expand_worker(text, feed, window_start, window_end, tz, out_queue):
             if end is None:
                 end = start
 
+            source_start = start
+            source_end = end
+            source_timezone = timezone_name(start_property, source_start)
             start = to_local(start, tz)
             end = to_local(end, tz)
             if end < start:
                 end = start
+
+            attendees = component.get("ATTENDEE", [])
+            if not isinstance(attendees, list):
+                attendees = [attendees]
 
             events.append({
                 "uid": text_of(component, "UID"),
@@ -87,6 +96,17 @@ def _expand_worker(text, feed, window_start, window_end, tz, out_queue):
                 "status": text_of(component, "STATUS"),
                 "calendar": name,
                 "color": feed["color"],
+                "feedId": feed["id"],
+                "url": text_of(component, "URL"),
+                "organizer": text_of(component, "ORGANIZER"),
+                "attendees": [plain_text(str(value).strip()) for value in attendees],
+                "recurring": component.get("RRULE") is not None or component.get("RECURRENCE-ID") is not None,
+                "sourceStart": iso(source_start),
+                "sourceEnd": iso(source_end),
+                "sourceTimezone": source_timezone,
+                "secondaryStart": iso(to_timezone(source_start, secondary_tz)) if secondary_tz else "",
+                "secondaryEnd": iso(to_timezone(source_end, secondary_tz)) if secondary_tz else "",
+                "secondaryTimezone": timezone_label(secondary_tz),
             })
         out_queue.put(("ok", events, name, truncated))
     except MemoryError:
@@ -95,7 +115,7 @@ def _expand_worker(text, feed, window_start, window_end, tz, out_queue):
         out_queue.put(("error", f"parse failed: {exc}"))
 
 
-def expand_isolated(text, feed, window_start, window_end, tz):
+def expand_isolated(text, feed, window_start, window_end, tz, secondary_tz):
     # recurring_ical_events materializes the full occurrence list before
     # returning, so a high-frequency RRULE (FREQ=SECONDLY with no COUNT or
     # UNTIL) can already exhaust memory before any cap on the *result* would
@@ -105,7 +125,7 @@ def expand_isolated(text, feed, window_start, window_end, tz):
     ctx = multiprocessing.get_context("fork")
     out_queue = ctx.Queue()
     worker = ctx.Process(
-        target=_expand_worker, args=(text, feed, window_start, window_end, tz, out_queue)
+        target=_expand_worker, args=(text, feed, window_start, window_end, tz, secondary_tz, out_queue)
     )
     worker.start()
 
@@ -144,6 +164,63 @@ def feeds_path(override):
     return os.path.expanduser(override) if override else DEFAULT_FEEDS
 
 
+def feed_id(url):
+    return hashlib.sha256(url.encode("utf-8")).hexdigest()[:20]
+
+
+def secret_tool():
+    if os.environ.get("PROTONCAL_DISABLE_SECRET_STORE") == "1":
+        return ""
+    override = os.environ.get("PROTONCAL_SECRET_TOOL", "").strip()
+    return override or shutil.which("secret-tool") or ""
+
+
+def store_secret(identifier, value):
+    tool = secret_tool()
+    if not tool or not value:
+        return False, "Secret Service is unavailable"
+    try:
+        result = subprocess.run(
+            [tool, "store", "--label=Proton Calendar feed", "application",
+             "omarchy-protoncalendar", "feed", identifier],
+            input=value.encode("utf-8"), capture_output=True, timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, str(exc)
+    if result.returncode != 0:
+        return False, result.stderr.decode("utf-8", "replace").strip() or "keyring store failed"
+    return True, ""
+
+
+def lookup_secret(identifier):
+    tool = secret_tool()
+    if not tool:
+        return "", "Secret Service is unavailable"
+    try:
+        result = subprocess.run(
+            [tool, "lookup", "application", "omarchy-protoncalendar", "feed", identifier],
+            capture_output=True, timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return "", str(exc)
+    if result.returncode != 0:
+        return "", result.stderr.decode("utf-8", "replace").strip() or "keyring lookup failed"
+    return result.stdout.decode("utf-8", "replace").rstrip("\n"), ""
+
+
+def clear_secret(identifier):
+    tool = secret_tool()
+    if not tool:
+        return
+    try:
+        subprocess.run(
+            [tool, "clear", "application", "omarchy-protoncalendar", "feed", identifier],
+            capture_output=True, timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def load_feeds(path):
     if not os.path.exists(path):
         return [], ""
@@ -167,13 +244,23 @@ def load_feeds(path):
         if not isinstance(entry, dict):
             continue
         url = str(entry.get("url", "")).strip()
-        if not url:
+        identifier = str(entry.get("id", "")).strip() or (feed_id(url) if url else "")
+        stored = entry.get("secretStored", False) is True
+        secret_error = ""
+        if stored and identifier:
+            url, secret_error = lookup_secret(identifier)
+        if not identifier:
             continue
         feeds.append({
+            "id": identifier,
             "name": str(entry.get("name", "")).strip(),
             "url": url,
             "color": str(entry.get("color", "")).strip() or PALETTE[index % len(PALETTE)],
             "enabled": entry.get("enabled", True) is not False,
+            "notificationsEnabled": entry.get("notificationsEnabled", True) is not False,
+            "reminderMinutes": normalize_optional_minutes(entry.get("reminderMinutes")),
+            "secretStored": stored,
+            "secretError": secret_error,
         })
     return feeds, ""
 
@@ -181,10 +268,49 @@ def load_feeds(path):
 def save_feeds(path, feeds):
     ensure_private_dir(os.path.dirname(path))
     payload = [
-        {"name": f["name"], "url": f["url"], "color": f["color"], "enabled": f["enabled"]}
+        serialized_feed(f)
         for f in feeds
     ]
     write_atomic(path, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+
+
+def serialized_feed(feed):
+    data = {
+        "id": feed["id"],
+        "name": feed["name"],
+        "color": feed["color"],
+        "enabled": feed["enabled"],
+        "notificationsEnabled": feed.get("notificationsEnabled", True),
+        "reminderMinutes": feed.get("reminderMinutes"),
+        "secretStored": feed.get("secretStored", False),
+    }
+    if not data["secretStored"]:
+        data["url"] = feed.get("url", "")
+    return data
+
+
+def normalize_optional_minutes(value):
+    if value is None or value == "":
+        return None
+    try:
+        return max(1, min(10080, int(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def secure_feeds(path, feeds):
+    changed = False
+    for feed in feeds:
+        if feed.get("secretStored") or not feed.get("url"):
+            continue
+        stored, _ = store_secret(feed["id"], feed["url"])
+        if stored:
+            feed["secretStored"] = True
+            feed["secretError"] = ""
+            changed = True
+    if changed:
+        save_feeds(path, feeds)
+    return changed
 
 
 def ensure_private_dir(directory):
@@ -347,7 +473,7 @@ def fetch(url):
             write_atomic(path, text)
         except OSError:
             pass
-        return text, "", False
+        return text, "", False, iso(datetime.now().astimezone())
 
     return read_cache(path, "too many redirects")
 
@@ -355,9 +481,50 @@ def fetch(url):
 def read_cache(path, error):
     try:
         with open(path, encoding="utf-8") as handle:
-            return handle.read(), error, True
+            updated = datetime.fromtimestamp(os.path.getmtime(path)).astimezone()
+            return handle.read(), error, True, iso(updated)
     except OSError:
-        return "", error, False
+        return "", error, False, ""
+
+
+def timezone_name(prop, value):
+    if is_all_day(value):
+        return ""
+    try:
+        tzid = str(prop.params.get("TZID", "")).strip()
+        if tzid:
+            return tzid
+    except Exception:
+        pass
+    try:
+        return str(value.tzinfo.key)
+    except Exception:
+        return str(value.tzinfo or "")
+
+
+def timezone_label(tz):
+    if not tz:
+        return ""
+    return str(getattr(tz, "key", "") or tz)
+
+
+def to_timezone(value, tz):
+    if not tz or is_all_day(value):
+        return value
+    if value.tzinfo is None:
+        return value.replace(tzinfo=local_tz()).astimezone(tz)
+    return value.astimezone(tz)
+
+
+def named_timezone(name):
+    value = str(name or "").strip()
+    if not value:
+        return None, ""
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(value), ""
+    except Exception:
+        return None, f"unknown secondary time zone: {plain_text(value)}"
 
 
 def local_tz():
@@ -408,8 +575,8 @@ def text_of(component, key):
     return plain_text(str(value).strip())
 
 
-def expand(text, feed, window_start, window_end, tz):
-    return expand_isolated(text, feed, window_start, window_end, tz)
+def expand(text, feed, window_start, window_end, tz, secondary_tz):
+    return expand_isolated(text, feed, window_start, window_end, tz, secondary_tz)
 
 
 def dedupe(events):
@@ -424,7 +591,7 @@ def dedupe(events):
     return unique
 
 
-def sync(path, back_months, forward_months):
+def sync(path, back_months, forward_months, secondary_timezone=""):
     import icalendar
     import recurring_ical_events
 
@@ -433,6 +600,7 @@ def sync(path, back_months, forward_months):
         feeds = feeds[:MAX_FEEDS]
         feeds_error = feeds_error or f"only the first {MAX_FEEDS} feeds are synced"
     tz = local_tz()
+    secondary_tz, timezone_error = named_timezone(secondary_timezone)
     now = datetime.now(tz)
 
     window_start = (now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -446,8 +614,16 @@ def sync(path, back_months, forward_months):
             report.append({**feed_summary(feed), "ok": True, "error": "", "skipped": True})
             continue
 
+        if not feed["url"]:
+            report.append({
+                **feed_summary(feed),
+                "ok": False,
+                "error": plain_text(feed.get("secretError") or "calendar link is unavailable"),
+            })
+            continue
+
         try:
-            text, error, from_cache = fetch(feed["url"])
+            text, error, from_cache, last_updated_at = fetch(feed["url"])
         except Exception as exc:
             # Belt and suspenders alongside the try/except inside fetch_one_hop:
             # one feed misbehaving -- however it manages to -- must not take
@@ -459,7 +635,9 @@ def sync(path, back_months, forward_months):
             continue
 
         try:
-            feed_events, resolved, truncated = expand(text, feed, window_start, window_end, tz)
+            feed_events, resolved, truncated = expand(
+                text, feed, window_start, window_end, tz, secondary_tz
+            )
         except ExpansionAborted as exc:
             report.append({**feed_summary(feed), "ok": False, "error": plain_text(str(exc))})
             continue
@@ -476,6 +654,7 @@ def sync(path, back_months, forward_months):
             "stale": from_cache,
             "count": len(feed_events),
             "truncated": truncated,
+            "lastUpdatedAt": last_updated_at,
         })
 
     if len(events) > MAX_EVENTS_TOTAL:
@@ -488,7 +667,7 @@ def sync(path, back_months, forward_months):
         "windowEnd": iso(window_end),
         "configured": len(feeds) > 0,
         "feedsFile": path,
-        "error": feeds_error,
+        "error": feeds_error or timezone_error,
         "ok": bool(feeds) and all(f.get("ok") for f in report),
         "feeds": report,
         "events": dedupe(events),
@@ -496,7 +675,15 @@ def sync(path, back_months, forward_months):
 
 
 def feed_summary(feed):
-    return {"name": plain_text(feed["name"]), "url": feed["url"], "color": feed["color"]}
+    return {
+        "id": feed["id"],
+        "name": plain_text(feed["name"]),
+        "color": feed["color"],
+        "enabled": feed["enabled"],
+        "notificationsEnabled": feed.get("notificationsEnabled", True),
+        "reminderMinutes": feed.get("reminderMinutes"),
+        "secretStored": feed.get("secretStored", False),
+    }
 
 
 def result_path():
@@ -515,9 +702,13 @@ def main():
     parser.add_argument("--remove-feed", metavar="URL", help="drop a feed and sync")
     parser.add_argument("--remove-feed-env", action="store_true",
                          help="like --remove-feed, but read the URL from $PROTONCAL_FEED_URL")
+    parser.add_argument("--remove-feed-id", default="", help="drop a feed by its non-secret identifier")
+    parser.add_argument("--update-feed-env", action="store_true",
+                         help="update feed preferences from $PROTONCAL_FEED_UPDATE")
     parser.add_argument("--list-feeds", action="store_true", help="print the configured feeds")
     parser.add_argument("--back-months", type=int, default=1)
     parser.add_argument("--forward-months", type=int, default=12)
+    parser.add_argument("--secondary-time-zone", default="")
     parser.add_argument("--json", action="store_true", help="accepted and ignored; output is always JSON")
     args = parser.parse_args()
 
@@ -525,13 +716,15 @@ def main():
 
     if args.list_feeds:
         feeds, error = load_feeds(path)
-        print(json.dumps({"feedsFile": path, "error": error, "feeds": feeds}, ensure_ascii=False))
+        print(json.dumps({"feedsFile": path, "error": error,
+                          "feeds": [feed_summary(feed) for feed in feeds]}, ensure_ascii=False))
         return 0
 
     add_url = os.environ.get("PROTONCAL_FEED_URL", "") if args.add_feed_env else args.add_feed
     remove_url = os.environ.get("PROTONCAL_FEED_URL", "") if args.remove_feed_env else args.remove_feed
+    update_raw = os.environ.get("PROTONCAL_FEED_UPDATE", "") if args.update_feed_env else ""
 
-    if add_url or remove_url:
+    if add_url or remove_url or args.remove_feed_id or update_raw:
         feeds, error = load_feeds(path)
         if error:
             print(json.dumps({"ok": False, "error": error}, ensure_ascii=False))
@@ -542,13 +735,55 @@ def main():
                 pass
             else:
                 feeds.append({
+                    "id": feed_id(url),
                     "name": args.name.strip(),
                     "url": url,
                     "color": PALETTE[len(feeds) % len(PALETTE)],
                     "enabled": True,
+                    "notificationsEnabled": True,
+                    "reminderMinutes": None,
+                    "secretStored": False,
+                    "secretError": "",
                 })
         if remove_url:
+            removed = [f for f in feeds if f["url"] == remove_url.strip()]
             feeds = [f for f in feeds if f["url"] != remove_url.strip()]
+            for feed in removed:
+                if feed.get("secretStored"):
+                    clear_secret(feed["id"])
+        if args.remove_feed_id:
+            identifier = args.remove_feed_id.strip()
+            removed = [f for f in feeds if f["id"] == identifier]
+            feeds = [f for f in feeds if f["id"] != identifier]
+            for feed in removed:
+                if feed.get("secretStored"):
+                    clear_secret(feed["id"])
+        if update_raw:
+            try:
+                update = json.loads(update_raw)
+            except ValueError:
+                update = {}
+            identifier = str(update.get("id", ""))
+            for feed in feeds:
+                if feed["id"] != identifier:
+                    continue
+                if "name" in update:
+                    feed["name"] = plain_text(update["name"]).strip()
+                if "color" in update and re.match(r"^#[0-9a-fA-F]{6}$", str(update["color"])):
+                    feed["color"] = str(update["color"])
+                if "enabled" in update:
+                    feed["enabled"] = update["enabled"] is True
+                if "notificationsEnabled" in update:
+                    feed["notificationsEnabled"] = update["notificationsEnabled"] is True
+                if "reminderMinutes" in update:
+                    feed["reminderMinutes"] = normalize_optional_minutes(update["reminderMinutes"])
+            move = int(update.get("move", 0)) if str(update.get("move", "0")).lstrip("-").isdigit() else 0
+            if move:
+                current = next((i for i, feed in enumerate(feeds) if feed["id"] == identifier), -1)
+                target = max(0, min(len(feeds) - 1, current + (1 if move > 0 else -1)))
+                if current >= 0 and target != current:
+                    feeds.insert(target, feeds.pop(current))
+        secure_feeds(path, feeds)
         try:
             save_feeds(path, feeds)
         except OSError as exc:
@@ -564,7 +799,11 @@ def main():
             pass
 
     try:
-        payload = sync(path, max(0, args.back_months), max(1, args.forward_months))
+        feeds, migration_error = load_feeds(path)
+        if not migration_error:
+            secure_feeds(path, feeds)
+        payload = sync(path, max(0, args.back_months), max(1, args.forward_months),
+                       args.secondary_time_zone)
     except ImportError as exc:
         payload = {
             "ok": False, "configured": False, "feeds": [], "events": [],

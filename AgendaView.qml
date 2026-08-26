@@ -13,6 +13,8 @@ Item {
   property string fontFamily: Style.font.family
   property int defaultReminderMinutes: 60
   property var reminderOverrides: ({})
+  property string timeFormat: "24-hour"
+  property string language: "en"
   signal eventActivated(var event)
   signal reminderChanged(var event, var value)
 
@@ -31,7 +33,8 @@ Item {
     id: empty
     width: parent.width
     visible: root.total === 0
-    text: "Nothing coming up in the next twelve months."
+    text: root.language === "sv" ? "Inget kommande under de närmaste tolv månaderna."
+      : "Nothing coming up in the next twelve months."
     color: root.dim
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
@@ -88,6 +91,10 @@ Item {
             showDate: true
             foreground: root.foreground
             fontFamily: root.fontFamily
+            timeFormat: root.timeFormat
+            language: root.language
+            reminderValues: Model.reminderMinutesList(modelData, root.reminderOverrides,
+              [root.defaultReminderMinutes], null)
             reminderMinutes: Model.reminderMinutes(modelData, root.reminderOverrides, root.defaultReminderMinutes) < 0
               ? root.defaultReminderMinutes
               : Model.reminderMinutes(modelData, root.reminderOverrides, root.defaultReminderMinutes)

@@ -11,14 +11,18 @@ Item {
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
   property bool expanded: false
+  property string language: "en"
+  property int defaultDurationMinutes: 60
 
-  signal submitted(string title, string time, bool allDay)
+  signal submitted(string title, string time, string endTime, bool allDay,
+    string calendar, string location, string clipboardText)
   signal dismissed()
 
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property var parsedTime: Model.parseTime(timeField.text)
+  readonly property var parsedEndTime: Model.parseTime(endTimeField.text)
   readonly property bool valid: titleField.text.replace(/^\s+|\s+$/g, "") !== ""
-    && (allDayToggle.checked || parsedTime !== null)
+    && (allDayToggle.checked || (parsedTime !== null && parsedEndTime !== null))
 
   implicitHeight: expanded ? column.implicitHeight : 0
   clip: true
@@ -31,6 +35,16 @@ Item {
     titleField.text = ""
     allDayToggle.checked = false
     timeField.text = Model.nextSlot(root.today).text
+    var start = Model.nextSlot(root.today)
+    var end = new Date(root.today.getFullYear(), root.today.getMonth(), root.today.getDate(),
+      start.hour, start.minute + root.defaultDurationMinutes)
+    endTimeField.text = Model.formatTime(end, "24-hour")
+    calendarField.text = ""
+    locationField.text = ""
+  }
+
+  function label(english, swedish) {
+    return root.language === "sv" ? swedish : english
   }
 
   function focusTitle() {
@@ -40,9 +54,17 @@ Item {
 
   function submit() {
     if (!valid) return
-    root.submitted(titleField.text.replace(/^\s+|\s+$/g, ""),
-                   allDayToggle.checked ? "" : parsedTime.text,
-                   allDayToggle.checked)
+    var title = titleField.text.replace(/^\s+|\s+$/g, "")
+    var startText = allDayToggle.checked ? "" : parsedTime.text
+    var endText = allDayToggle.checked ? "" : parsedEndTime.text
+    var details = [title]
+    if (root.dateKey) details.push(root.dateKey)
+    if (allDayToggle.checked) details.push(Model.text("allDay", root.language))
+    else details.push(startText + "–" + endText)
+    if (calendarField.text) details.push(Model.text("calendar", root.language) + ": " + calendarField.text)
+    if (locationField.text) details.push(Model.text("location", root.language) + ": " + locationField.text)
+    root.submitted(title, startText, endText, allDayToggle.checked,
+      calendarField.text, locationField.text, details.join("\n"))
     reset()
   }
 
@@ -67,9 +89,9 @@ Item {
 
       TextField {
         id: titleField
-        width: parent.width - timeField.width - allDayToggle.width - submitButton.width
-          - Style.space(18)
-        placeholderText: "New event"
+        width: parent.width - timeField.width - endTimeField.width - allDayToggle.width
+          - submitButton.width - Style.space(24)
+        placeholderText: root.label("New event", "Nytt event")
         foreground: root.foreground
         font.family: root.fontFamily
         Keys.onPressed: function (event) { root.handleKey(event) }
@@ -86,11 +108,22 @@ Item {
         Keys.onPressed: function (event) { root.handleKey(event) }
       }
 
+      TextField {
+        id: endTimeField
+        width: Style.space(64)
+        enabled: !allDayToggle.checked
+        opacity: enabled ? 1.0 : 0.45
+        placeholderText: "10:00"
+        foreground: root.foreground
+        font.family: root.fontFamily
+        Keys.onPressed: function (event) { root.handleKey(event) }
+      }
+
       Button {
         id: allDayToggle
         property bool checked: false
         anchors.verticalCenter: parent.verticalCenter
-        text: "All day"
+        text: Model.text("allDay", root.language)
         selected: checked
         bordered: true
         foreground: root.foreground
@@ -102,7 +135,7 @@ Item {
       Button {
         id: submitButton
         anchors.verticalCenter: parent.verticalCenter
-        text: "Open in Proton"
+        text: Model.text("openProton", root.language)
         iconText: "󰏋"
         bordered: true
         enabled: root.valid
@@ -114,15 +147,41 @@ Item {
       }
     }
 
+    Row {
+      width: parent.width
+      spacing: Style.space(6)
+
+      TextField {
+        id: calendarField
+        width: (parent.width - Style.space(6)) / 2
+        placeholderText: Model.text("calendar", root.language)
+        foreground: root.foreground
+        font.family: root.fontFamily
+        Keys.onPressed: function (event) { root.handleKey(event) }
+      }
+
+      TextField {
+        id: locationField
+        width: (parent.width - Style.space(6)) / 2
+        placeholderText: Model.text("location", root.language)
+        foreground: root.foreground
+        font.family: root.fontFamily
+        Keys.onPressed: function (event) { root.handleKey(event) }
+      }
+    }
+
     Text {
       width: parent.width
       text: {
         var when = root.dateKey === "" ? "the selected day"
           : Qt.formatDate(Model.parseStamp(root.dateKey), "ddd d MMM")
         if (!root.valid && titleField.text === "")
-          return "Proton has no write API — the title is copied and the web app opens on the day."
-        if (!root.valid) return "That is not a time. Try 9, 930, or 9:30."
-        return "Copies the title and opens Proton Calendar on " + when + " for a paste."
+          return root.label("Proton has no write API — the details are copied and the web app opens on the day.",
+            "Proton saknar skriv-API — detaljerna kopieras och webbappen öppnas på rätt dag.")
+        if (!root.valid) return root.label("That is not a valid time. Try 9, 930, or 9:30.",
+          "Tiden är inte giltig. Prova 9, 930 eller 9:30.")
+        return root.label("Copies the details and opens Proton Calendar on ",
+          "Kopierar detaljerna och öppnar Proton Calendar på ") + when + "."
       }
       color: root.dim
       font.family: root.fontFamily

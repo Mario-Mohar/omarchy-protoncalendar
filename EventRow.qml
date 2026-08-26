@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "Model.js" as Model
 
 Rectangle {
   id: root
@@ -13,6 +14,9 @@ Rectangle {
   property bool reminderInherited: true
   property bool reminderOff: false
   property bool reminderEditorOpen: false
+  property var reminderValues: [reminderMinutes]
+  property string timeFormat: "24-hour"
+  property string language: "en"
 
   signal activated()
   signal reminderChanged(var event, var value)
@@ -56,14 +60,14 @@ Rectangle {
     text: {
       if (!root.event) return ""
       if (root.event.allDay) {
-        if (!root.showDate) return "all day"
+        if (!root.showDate) return Model.text("allDay", root.language)
         var from = Qt.formatDate(root.event.start, "ddd d MMM")
         if (!root.event.multiDay) return from
         var sameMonth = root.event.start.getMonth() === root.event.lastDate.getMonth()
         return Qt.formatDate(root.event.start, sameMonth ? "ddd d" : "ddd d MMM")
           + "–" + Qt.formatDate(root.event.lastDate, "ddd d MMM")
       }
-      var clock = Qt.formatDateTime(root.event.start, "HH:mm")
+      var clock = Model.formatTime(root.event.start, root.timeFormat)
       return root.showDate
         ? Qt.formatDate(root.event.start, "ddd d MMM") + " " + clock
         : clock
@@ -118,8 +122,11 @@ Rectangle {
     iconText: root.reminderOff ? "󰂛" : "󰂞"
     bordered: root.reminderEditorOpen || !root.reminderInherited
     tooltipText: root.reminderOff ? "Reminder off"
-      : (root.reminderInherited ? "Reminder: default (" : "Reminder: ")
-        + root.reminderMinutes + " min before"
+      : (root.reminderInherited
+          ? (root.language === "sv" ? "Påminnelse: standard (" : "Reminder: default (")
+          : (root.language === "sv" ? "Påminnelse: " : "Reminder: "))
+        + root.reminderValues.join(", ") + (root.language === "sv" ? " min före" : " min before")
+        + (root.reminderInherited ? ")" : "")
     foreground: root.reminderOff ? root.dim : root.foreground
     fontFamily: root.fontFamily
     onClicked: root.reminderEditorOpen = !root.reminderEditorOpen
@@ -137,8 +144,7 @@ Rectangle {
     TextField {
       id: reminderField
       width: Style.space(72)
-      placeholderText: String(root.reminderMinutes)
-      inputMethodHints: Qt.ImhDigitsOnly
+      placeholderText: root.reminderValues.join(",")
       foreground: root.foreground
       font.family: root.fontFamily
       Keys.onReturnPressed: saveReminder.clicked()
@@ -147,19 +153,19 @@ Rectangle {
 
     Button {
       id: saveReminder
-      text: "Set minutes"
+      text: root.language === "sv" ? "Sätt minuter" : "Set minutes"
       bordered: true
       foreground: root.foreground
       fontFamily: root.fontFamily
       fontSize: Style.font.caption
       onClicked: {
-        var value = parseInt(reminderField.text, 10)
-        if (!isNaN(value)) root.setReminder(Math.max(1, Math.min(10080, value)))
+        var values = Model.normalizeMinuteList(reminderField.text.split(","), [])
+        if (values.length) root.setReminder(values)
       }
     }
 
     Button {
-      text: "Use default"
+      text: root.language === "sv" ? "Använd standard" : "Use default"
       selected: root.reminderInherited
       bordered: true
       foreground: root.foreground
@@ -169,7 +175,7 @@ Rectangle {
     }
 
     Button {
-      text: "Off"
+      text: root.language === "sv" ? "Av" : "Off"
       selected: root.reminderOff
       bordered: true
       foreground: root.foreground

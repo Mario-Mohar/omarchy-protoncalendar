@@ -17,6 +17,8 @@ const byTitle = t => payload.events.filter(e => e.title.includes(t))
 check("Sunday week setting", M.normalizedWeekStart("Sunday", 1), 0)
 check("Monday week setting", M.normalizedWeekStart("Monday", 0), 1)
 check("week setting name", M.weekStartSettingName(1), "Monday")
+check("Swedish language", M.resolvedLanguage("System", "sv_SE"), "sv")
+check("12-hour clock", M.formatTime(new Date(2026, 7, 17, 13, 5), "12-hour"), "1:05 PM")
 
 const reminderEvent = payload.events[0]
 const reminderId = M.reminderKey(reminderEvent)
@@ -24,6 +26,20 @@ check("reminder defaults", M.reminderMinutes(reminderEvent, {}, 60), 60)
 check("reminder override", M.reminderMinutes(reminderEvent, { [reminderId]: 25 }, 60), 25)
 check("reminder off", M.reminderMinutes(reminderEvent, { [reminderId]: false }, 60), -1)
 check("reminder lower bound", M.reminderMinutes(reminderEvent, { [reminderId]: 0 }, 60), 1)
+check("multiple reminders", M.reminderMinutesList(reminderEvent,
+  { [reminderId]: [15, 60, 15] }, [30], null).join(","), "60,15")
+check("feed reminder", M.reminderMinutesList(reminderEvent, {}, [60], 25).join(","), "25")
+
+const standup = byTitle("Standup")[0]
+check("event feed id", standup.feedId.length > 0, "true")
+check("meeting link", standup.meetingLink, "https://meet.proton.me/team-room")
+check("participants", standup.attendees.length, 2)
+check("source timezone", standup.sourceTimezone, "Europe/Stockholm")
+check("event search", M.filterEvents(payload.events, "alice@example.com", null).length, 1)
+check("today scope", M.filterEvents(payload.events, "", null, "Today",
+  new Date("2026-08-17T12:00:00+02:00"), 1).length, 1)
+check("view localization", M.viewFromLabel(M.viewLabel("Upcoming", "sv")), "Upcoming")
+check("bar localization", M.barModeFromLabel(M.barModeLabel("Privacy", "sv")), "Privacy")
 
 // All-day: exclusive DTEND must become an inclusive last date.
 const semester = byTitle("Semester")[0]
@@ -44,12 +60,15 @@ check("Nattpass on end day", M.eventsOn(buckets, "2026-08-22").includes(natt), "
 const dst = byTitle("sommartidsskiftet")
 check("DST occurrences", dst.length, 4)
 check("DST hours all 12", dst.every(e => e.start.getHours() === 12), "true")
+check("recurrence marker", byTitle("Traning").every(e => e.recurring), "true")
 
 // nextUpcoming
 const before = new Date("2026-08-17T08:00:00+02:00")
 check("next at 08:00 on the 17th", M.nextUpcoming(payload.events, before).title, "Standup")
 const during = new Date("2026-08-17T09:30:00+02:00")
 check("ongoing event wins", M.nextUpcoming(payload.events, during).title, "Standup")
+check("current event", M.currentEvent(payload.events, during).title, "Standup")
+check("event progress", M.eventProgress(M.currentEvent(payload.events, during), during), 0.5)
 check("relative during = now", M.relativeLabel(M.nextUpcoming(payload.events, during), during), "now")
 check("relative 25 min out", M.relativeLabel(byTitle("Standup")[0], new Date("2026-08-17T08:35:00+02:00")), "in 25 min")
 check("relative tomorrow", M.relativeLabel(byTitle("Standup")[0], new Date("2026-08-16T12:00:00+02:00")), "tomorrow")

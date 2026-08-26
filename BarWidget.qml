@@ -13,35 +13,51 @@ BarWidget {
     settings: root.settings
   }
 
-  readonly property string labelMode: {
-    var v = root.setting("barLabel", "Title and time")
-    return root.vertical ? "Off" : String(v)
+  readonly property string barMode: {
+    if (root.vertical) return "Off"
+    var configured = String(root.setting("barMode", ""))
+    if (configured !== "") return configured
+    var legacy = String(root.setting("barLabel", "Title and time"))
+    return legacy === "Off" ? "Off" : (legacy === "Title" ? "Next event" : "Countdown")
   }
 
+  readonly property var currentEvent: Model.currentEvent(calendar.events, calendar.now)
+  readonly property real currentProgress: Model.eventProgress(currentEvent, calendar.now)
+
   readonly property string barText: {
-    if (labelMode === "Off") return ""
+    if (barMode === "Off") return ""
+    if (barMode === "Today count") {
+      var count = calendar.todayEvents.length
+      return count + (count === 1 ? " event" : (calendar.language === "sv" ? " event" : " events"))
+    }
+    if (barMode === "Privacy") return currentEvent || calendar.todayEvents.length
+      ? (calendar.language === "sv" ? "Upptagen" : "Busy")
+      : (calendar.language === "sv" ? "Ledig" : "Free")
+    if (barMode === "Current event") {
+      if (!currentEvent) return calendar.language === "sv" ? "Ledig" : "Free"
+      var currentTitle = currentEvent.title
+      return currentTitle.length > 22 ? currentTitle.substring(0, 21) + "…" : currentTitle
+    }
     var event = calendar.nextEvent
     if (!event) return ""
 
     var title = event.title
     if (title.length > 22) title = title.substring(0, 21) + "…"
-    if (labelMode === "Title") return title
+    if (barMode === "Next event") return title
 
     var relative = calendar.nextRelative
-
-    if (event.allDay)
-      return relative === "" ? title : relative + " · " + title
-
-    if (relative === "now" || (relative.indexOf("in ") === 0 && relative.indexOf("min") > 0))
-      return relative + " · " + title
-    return Qt.formatDateTime(event.start, "HH:mm") + " " + title
+    return relative === "" ? title : relative + " · " + title
   }
 
   readonly property string tooltip: {
-    if (!calendar.configured) return "Proton Calendar — no feed added yet"
+    if (!calendar.configured) return calendar.language === "sv"
+      ? "Proton Calendar — ingen kalender tillagd" : "Proton Calendar — no feed added yet"
     if (calendar.feedError !== "") return calendar.feedError
+    if (barMode === "Privacy") return currentEvent || calendar.todayEvents.length
+      ? (calendar.language === "sv" ? "Upptagen" : "Busy")
+      : (calendar.language === "sv" ? "Ledig" : "Free")
     var event = calendar.nextEvent
-    if (!event) return "Nothing coming up"
+    if (!event) return calendar.language === "sv" ? "Inget kommande" : "Nothing coming up"
     var relative = calendar.nextRelative
     return event.title + "\n" + root.whenText(event)
       + (relative ? " · " + relative : "")
@@ -50,7 +66,8 @@ BarWidget {
 
   function whenText(event) {
     if (!event) return ""
-    if (!event.allDay) return Qt.formatDateTime(event.start, "ddd d MMM HH:mm")
+    if (!event.allDay) return Qt.formatDate(event.start, "ddd d MMM") + " "
+      + Model.formatTime(event.start, calendar.timeFormat)
     var from = Qt.formatDate(event.start, "ddd d MMM")
     if (!event.multiDay) return from
     return from + " – " + Qt.formatDate(event.lastDate, "ddd d MMM")
@@ -117,7 +134,8 @@ BarWidget {
       var lines = []
       for (var i = 0; i < list.length; i++) {
         var event = list[i]
-        lines.push((event.allDay ? "all day" : Qt.formatDateTime(event.start, "HH:mm"))
+        lines.push((event.allDay ? Model.text("allDay", calendar.language)
+          : Model.formatTime(event.start, calendar.timeFormat))
           + "  " + event.title)
       }
       return lines.join("\n")
@@ -184,6 +202,23 @@ BarWidget {
             color: button.foreground
             font.family: root.labelFontFamily
             font.pixelSize: Style.font.caption
+          }
+
+        }
+
+        Rectangle {
+          visible: root.currentEvent !== null
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.bottom: parent.bottom
+          anchors.bottomMargin: Style.space(1)
+          height: Style.spacing.hairline
+          color: Qt.rgba(button.foreground.r, button.foreground.g, button.foreground.b, 0.18)
+
+          Rectangle {
+            width: parent.width * root.currentProgress
+            height: parent.height
+            color: Color.accent
           }
         }
       }

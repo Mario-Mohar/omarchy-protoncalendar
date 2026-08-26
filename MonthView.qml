@@ -14,6 +14,7 @@ Item {
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
   property string nextWeekStartLabel: ""
+  property bool showWeekNumbers: true
 
   signal daySelected(string key)
   signal dayActivated(string key)
@@ -45,7 +46,8 @@ Item {
       spacing: root.cellSpacing
 
       Rectangle {
-        width: root.weekColumnWidth
+        width: root.showWeekNumbers ? root.weekColumnWidth : 0
+        visible: root.showWeekNumbers
         height: Style.space(16)
         radius: Style.cornerRadius
         color: weekStartMouse.containsMouse
@@ -80,7 +82,7 @@ Item {
       }
 
       Item {
-        width: root.gutterWidth
+        width: root.showWeekNumbers ? root.gutterWidth : 0
         height: Style.space(16)
       }
 
@@ -111,7 +113,8 @@ Item {
         spacing: root.cellSpacing
 
         Text {
-          width: root.weekColumnWidth
+          width: root.showWeekNumbers ? root.weekColumnWidth : 0
+          visible: root.showWeekNumbers
           height: root.cellHeight
           horizontalAlignment: Text.AlignHCenter
           verticalAlignment: Text.AlignVCenter
@@ -122,7 +125,7 @@ Item {
         }
 
         Item {
-          width: root.gutterWidth
+          width: root.showWeekNumbers ? root.gutterWidth : 0
           height: root.cellHeight
         }
 

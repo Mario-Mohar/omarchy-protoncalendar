@@ -14,6 +14,8 @@ Item {
   property string todayKey: ""
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
+  property bool dayMode: false
+  property string timeFormat: "24-hour"
 
   signal eventActivated(var event)
   signal dayActivated(string key)
@@ -23,7 +25,9 @@ Item {
   readonly property int hourCount: Math.max(1, hours.end - hours.start)
 
   readonly property int gutterWidth: Style.space(34)
-  readonly property int columnWidth: Style.space(64)
+  readonly property int columnWidth: dayMode
+    ? Math.max(Style.space(320), width - gutterWidth - columnSpacing)
+    : Style.space(64)
   readonly property int columnSpacing: Style.space(2)
   readonly property int hourHeight: Style.space(30)
   readonly property int gridHeight: hourCount * hourHeight
@@ -48,7 +52,7 @@ Item {
   Item {
     id: header
     width: parent.width
-    height: Style.space(34)
+    height: Style.space(40)
 
     Repeater {
       model: root.days
@@ -63,8 +67,8 @@ Item {
 
         Rectangle {
           anchors.centerIn: parent
-          width: Math.max(dayNumber.implicitWidth, dayName.implicitWidth) + Style.space(12)
-          height: parent.height - Style.space(6)
+          width: Math.max(dayNumber.implicitWidth, dayName.implicitWidth) + Style.space(18)
+          height: parent.height - Style.space(4)
           radius: Style.cornerRadius
           color: dayMouse.containsMouse
             ? Style.hoverFillFor(root.foreground, Color.accent)
@@ -201,7 +205,7 @@ Item {
             anchors.topMargin: -Style.space(5)
             width: root.gutterWidth - Style.space(6)
             horizontalAlignment: Text.AlignRight
-            text: (root.hours.start + index < 10 ? "0" : "") + (root.hours.start + index) + ":00"
+            text: Model.formatTime(new Date(2000, 0, 1, root.hours.start + index, 0), root.timeFormat)
             color: root.fainter
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -283,8 +287,8 @@ Item {
                   visible: blockMouse.containsMouse
                   fontFamily: root.fontFamily
                   text: modelData.event.title + "\n"
-                    + Qt.formatDateTime(modelData.event.start, "HH:mm") + "–"
-                    + Qt.formatDateTime(modelData.event.end, "HH:mm")
+                    + Model.formatTime(modelData.event.start, root.timeFormat) + "–"
+                    + Model.formatTime(modelData.event.end, root.timeFormat)
                     + (modelData.event.location ? "\n" + modelData.event.location : "")
                 }
               }
