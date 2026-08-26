@@ -53,7 +53,7 @@ Settings → Calendars → your calendar → Share → Share with anyone).
 - **Month** — always six rows, ISO week numbers, today outlined, up to four
   event dots per day
 - **Week** — an hour grid with an all-day band, overlapping events side by
-  side, and a line for right now
+  side, a line for right now, and a Sunday or Monday week start
 - **Upcoming** — everything ahead as one dated list, grouped by month
 - **Quick add** — day pre-filled, time defaults to the next half hour, title
   copied to the clipboard, opens Proton on the right day
@@ -86,6 +86,7 @@ Right-click the bar widget to cycle the bar label; middle-click to refresh.
 | `refreshIntervalSec` | integer | 900 | Feed poll interval |
 | `barLabel` | enum | `Title and time` | `Off`, `Title`, or `Title and time` |
 | `defaultView` | enum | `Month` | `Month`, `Week`, or `Upcoming` |
+| `weekStartDay` | enum | `Sunday` | `Sunday` or `Monday` |
 | `dayStartHour` | integer | 7 | Week view window start |
 | `dayEndHour` | integer | 22 | Week view window end |
 | `notificationsEnabled` | boolean | `true` | Desktop notifications for timed events |

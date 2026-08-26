@@ -46,7 +46,8 @@ function toggledWeekStart(index) {
 }
 
 function weekStartSettingName(index) {
-  return WEEKDAY_NAMES[normalizedWeekStart(index, 1)]
+  var name = WEEKDAY_NAMES[normalizedWeekStart(index, 1)]
+  return name.charAt(0).toUpperCase() + name.slice(1)
 }
 
 function weekdayOrder(weekStart) {

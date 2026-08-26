@@ -31,6 +31,7 @@
       "refreshIntervalSec": 900,
       "barLabel": "Title and time",
       "defaultView": "Month",
+      "weekStartDay": "Sunday",
       "dayStartHour": 7,
       "dayEndHour": 22,
       "notificationsEnabled": true,
@@ -73,6 +74,17 @@
         ],
         "defaultValue": "Month",
         "description": "Which view the panel opens on. Upcoming is a dated list of everything ahead."
+      },
+      {
+        "key": "weekStartDay",
+        "type": "enum",
+        "label": "Week starts on",
+        "options": [
+          "Sunday",
+          "Monday"
+        ],
+        "defaultValue": "Sunday",
+        "description": "First day shown in the month and week views."
       },
       {
         "key": "dayStartHour",

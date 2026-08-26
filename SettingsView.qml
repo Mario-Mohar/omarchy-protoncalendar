@@ -9,10 +9,12 @@ Item {
   property bool notificationSoundEnabled: true
   property string notificationSound: "Alarm"
   property int reminderMinutes: 60
+  property int weekStart: 0
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
 
   signal settingsRequested(bool enabled, bool soundEnabled, string sound, int minutes)
+  signal weekStartRequested(int day)
   signal soundPreviewRequested(string sound)
   signal testRequested()
 
@@ -37,6 +39,41 @@ Item {
     id: column
     width: parent.width
     spacing: Style.space(7)
+
+    PanelSectionHeader {
+      width: parent.width
+      text: "CALENDAR"
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+    }
+
+    Row {
+      width: parent.width
+      height: root.controlHeight
+      spacing: Style.space(6)
+
+      Text {
+        width: root.labelWidth
+        anchors.verticalCenter: parent.verticalCenter
+        text: "WEEK STARTS"
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+      }
+
+      ButtonGroup {
+        width: parent.width - root.labelWidth - Style.space(6)
+        options: ["Sunday", "Monday"]
+        value: root.weekStart === 1 ? "Monday" : "Sunday"
+        foreground: root.foreground
+        background: Color.background
+        fontFamily: root.fontFamily
+        fontSize: Style.font.caption
+        onChanged: function (value) {
+          root.weekStartRequested(value === "Monday" ? 1 : 0)
+        }
+      }
+    }
 
     PanelSectionHeader {
       width: parent.width

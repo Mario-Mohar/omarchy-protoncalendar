@@ -14,6 +14,10 @@ console.log(`-- payload: configured=${payload.configured} stale=${payload.stale}
 const buckets = M.bucketByDay(payload.events)
 const byTitle = t => payload.events.filter(e => e.title.includes(t))
 
+check("Sunday week setting", M.normalizedWeekStart("Sunday", 1), 0)
+check("Monday week setting", M.normalizedWeekStart("Monday", 0), 1)
+check("week setting name", M.weekStartSettingName(1), "Monday")
+
 const reminderEvent = payload.events[0]
 const reminderId = M.reminderKey(reminderEvent)
 check("reminder defaults", M.reminderMinutes(reminderEvent, {}, 60), 60)

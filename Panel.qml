@@ -44,7 +44,7 @@ Panel {
       === Model.keyForDate(Model.weekDays(today, weekStart, "")[0].date)
   }
 
-  readonly property int weekStart: Model.normalizedWeekStart(setting("weekStartDay", null), Qt.locale().firstDayOfWeek)
+  readonly property int weekStart: Model.normalizedWeekStart(setting("weekStartDay", "Sunday"), 0)
   readonly property string nextWeekStartLabel: Qt.locale().dayName(Model.toggledWeekStart(weekStart), Locale.LongFormat)
 
   readonly property var events: service ? service.events : []
@@ -336,10 +336,14 @@ Panel {
             notificationSoundEnabled: root.service ? root.service.notificationSoundEnabled : true
             notificationSound: root.service ? root.service.notificationSound : "Alarm"
             reminderMinutes: root.defaultReminderMinutes
+            weekStart: root.weekStart
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
             onSettingsRequested: function (enabled, soundEnabled, sound, minutes) {
               root.setNotificationSettings(enabled, soundEnabled, sound, minutes)
+            }
+            onWeekStartRequested: function (day) {
+              root.persistSettings({ weekStartDay: Model.weekStartSettingName(day) })
             }
             onSoundPreviewRequested: function (sound) {
               if (root.service) root.service.previewSound(sound)
