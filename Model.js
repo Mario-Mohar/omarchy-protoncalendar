@@ -1,6 +1,20 @@
 var MS_PER_DAY = 86400000
 var MS_PER_MINUTE = 60000
 var WEEKDAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+var DATE_NAMES = {
+  en: {
+    weekdays: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+    weekdaysShort: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+    monthsShort: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+  },
+  sv: {
+    weekdays: ["söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag"],
+    weekdaysShort: ["sön", "mån", "tis", "ons", "tors", "fre", "lör"],
+    months: ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"],
+    monthsShort: ["jan", "feb", "mars", "apr", "maj", "juni", "juli", "aug", "sep", "okt", "nov", "dec"]
+  }
+}
 var MEETING_HOSTS = /(meet\.google\.com|zoom\.us|teams\.microsoft\.com|meet\.proton\.me|jitsi\.|whereby\.com|webex\.com)/i
 var TEXT = {
   en: {
@@ -11,10 +25,17 @@ var TEXT = {
     monday: "Monday", month: "Month", next: "Next", noEvents: "Nothing scheduled.",
     noResults: "No matching events.", notifications: "Notifications", now: "now",
     openProton: "Open in Proton", organizer: "Organizer", participants: "Participants",
-    recurring: "Recurring", refresh: "Refresh", search: "Search events…",
+    recurring: "Recurring", refresh: "Refresh", refreshing: "Refreshing…", search: "Search events…",
     settings: "Settings", snooze15: "Snooze 15 min", snooze5: "Snooze 5 min",
     starting: "starting", sunday: "Sunday", today: "today", tomorrow: "tomorrow",
-    upcoming: "Upcoming", week: "Week"
+    upcoming: "Upcoming", week: "Week", bar: "Bar", busy: "Busy", free: "Free",
+    hideSettings: "Hide settings", lastGoodCopy: "Showing the last good copy — refresh failed.",
+    newEvent: "New event", nextDay: "Next day", nextMonth: "Next month",
+    nextRefresh: "next", nextWeek: "Next week", noFeed: "Proton Calendar — no feed added yet",
+    nothingComingUp: "Nothing coming up", nothingToday: "Nothing today",
+    previousDay: "Previous day", previousMonth: "Previous month", previousWeek: "Previous week",
+    reminderOff: "Reminder off", selectedDay: "the selected day", startWeeksOn: "Start weeks on",
+    updated: "Updated", weekAbbreviation: "W"
   },
   sv: {
     allDay: "hela dagen", backToday: "Tillbaka till idag", calendar: "Kalender",
@@ -24,10 +45,17 @@ var TEXT = {
     monday: "Måndag", month: "Månad", next: "Nästa", noEvents: "Inget planerat.",
     noResults: "Inga matchande event.", notifications: "Notiser", now: "nu",
     openProton: "Öppna i Proton", organizer: "Organisatör", participants: "Deltagare",
-    recurring: "Återkommande", refresh: "Uppdatera", search: "Sök event…",
+    recurring: "Återkommande", refresh: "Uppdatera", refreshing: "Uppdaterar…", search: "Sök event…",
     settings: "Inställningar", snooze15: "Skjut upp 15 min", snooze5: "Skjut upp 5 min",
     starting: "startar", sunday: "Söndag", today: "idag", tomorrow: "imorgon",
-    upcoming: "Kommande", week: "Vecka"
+    upcoming: "Kommande", week: "Vecka", bar: "Menyrad", busy: "Upptagen", free: "Ledig",
+    hideSettings: "Dölj inställningar", lastGoodCopy: "Visar den senaste fungerande kopian — uppdateringen misslyckades.",
+    newEvent: "Nytt event", nextDay: "Nästa dag", nextMonth: "Nästa månad",
+    nextRefresh: "nästa", nextWeek: "Nästa vecka", noFeed: "Proton Calendar — ingen kalender tillagd",
+    nothingComingUp: "Inget kommande", nothingToday: "Inget idag",
+    previousDay: "Föregående dag", previousMonth: "Föregående månad", previousWeek: "Föregående vecka",
+    reminderOff: "Påminnelse av", selectedDay: "den valda dagen", startWeeksOn: "Starta veckor på",
+    updated: "Uppdaterad", weekAbbreviation: "V"
   }
 }
 
@@ -50,6 +78,89 @@ function resolvedLanguage(value, localeName) {
 function text(key, language) {
   var lang = language === "sv" ? "sv" : "en"
   return TEXT[lang][key] || TEXT.en[key] || key
+}
+
+function weekdayName(index, shortFormat, language) {
+  var lang = language === "sv" ? "sv" : "en"
+  var day = ((Number(index) % 7) + 7) % 7
+  return DATE_NAMES[lang][shortFormat ? "weekdaysShort" : "weekdays"][day]
+}
+
+function formatDate(date, pattern, language) {
+  if (!date || isNaN(date.getTime())) return ""
+  var lang = language === "sv" ? "sv" : "en"
+  var names = DATE_NAMES[lang]
+  var values = {
+    dddd: names.weekdays[date.getDay()], ddd: names.weekdaysShort[date.getDay()],
+    MMMM: names.months[date.getMonth()], MMM: names.monthsShort[date.getMonth()],
+    yyyy: String(date.getFullYear()), yy: pad2(date.getFullYear() % 100),
+    dd: pad2(date.getDate()), d: String(date.getDate())
+  }
+  return String(pattern || "").replace(/dddd|ddd|MMMM|MMM|yyyy|yy|dd|d/g, function (token) {
+    return values[token]
+  })
+}
+
+function languageSettingLabel(value, language) {
+  return labeledValue(value, language, {
+    System: { en: "System", sv: "System" }, English: { en: "English", sv: "Engelska" },
+    Swedish: { en: "Swedish", sv: "Svenska" }
+  })
+}
+
+function languageSettingFromLabel(value) {
+  return valueFromLabel(value, "", {
+    System: { en: "System", sv: "System" }, English: { en: "English", sv: "Engelska" },
+    Swedish: { en: "Swedish", sv: "Svenska" }
+  }, "System")
+}
+
+function timeFormatLabel(value, language) {
+  return labeledValue(value, language, {
+    System: { en: "System", sv: "System" }, "24-hour": { en: "24-hour", sv: "24-timmars" },
+    "12-hour": { en: "12-hour", sv: "12-timmars" }
+  })
+}
+
+function timeFormatFromLabel(value) {
+  return valueFromLabel(value, "", {
+    System: { en: "System", sv: "System" }, "24-hour": { en: "24-hour", sv: "24-timmars" },
+    "12-hour": { en: "12-hour", sv: "12-timmars" }
+  }, "System")
+}
+
+function soundLabel(value, language) {
+  return labeledValue(value, language, {
+    Gentle: { en: "Gentle", sv: "Mjuk" }, Bell: { en: "Bell", sv: "Klocka" },
+    Chime: { en: "Chime", sv: "Signal" }, Alarm: { en: "Alarm", sv: "Alarm" }
+  })
+}
+
+function soundFromLabel(value) {
+  return valueFromLabel(value, "", {
+    Gentle: { en: "Gentle", sv: "Mjuk" }, Bell: { en: "Bell", sv: "Klocka" },
+    Chime: { en: "Chime", sv: "Signal" }, Alarm: { en: "Alarm", sv: "Alarm" }
+  }, "Alarm")
+}
+
+function reminderPresetLabel(minutes, language) {
+  var value = Number(minutes)
+  if (value === 15 || value === 30) return value + " min"
+  if (value === 60) return language === "sv" ? "1 timme" : "1 hour"
+  if (value === 120) return language === "sv" ? "2 timmar" : "2 hours"
+  return ""
+}
+
+function reminderPresetFromLabel(value) {
+  var labels = { "15 min": 15, "30 min": 30, "1 hour": 60, "1 timme": 60,
+    "2 hours": 120, "2 timmar": 120 }
+  return labels[String(value || "")] || 0
+}
+
+function eventCountLabel(count, language) {
+  var value = Number(count) || 0
+  if (language === "sv") return value + " event"
+  return value + (value === 1 ? " event" : " events")
 }
 
 function labeledValue(value, language, values) {
@@ -742,11 +853,11 @@ function readPayload(text) {
   return state
 }
 
-function firstFeedError(feeds) {
+function firstFeedError(feeds, language) {
   if (!feeds) return ""
   for (var i = 0; i < feeds.length; i++) {
     if (feeds[i] && feeds[i].error) {
-      var name = feeds[i].name || "Calendar"
+      var name = feeds[i].name || text("calendar", language)
       return name + ": " + feeds[i].error
     }
   }
@@ -771,6 +882,12 @@ if (typeof module !== "undefined") {
     visibleHours: visibleHours, minutesOfDay: minutesOfDay,
     parseTime: parseTime, nextSlot: nextSlot, plainText: plainText,
     resolvedLanguage: resolvedLanguage, text: text, formatTime: formatTime,
+    weekdayName: weekdayName, formatDate: formatDate,
+    languageSettingLabel: languageSettingLabel, languageSettingFromLabel: languageSettingFromLabel,
+    timeFormatLabel: timeFormatLabel, timeFormatFromLabel: timeFormatFromLabel,
+    soundLabel: soundLabel, soundFromLabel: soundFromLabel,
+    reminderPresetLabel: reminderPresetLabel, reminderPresetFromLabel: reminderPresetFromLabel,
+    eventCountLabel: eventCountLabel,
     viewLabel: viewLabel, viewFromLabel: viewFromLabel,
     scopeLabel: scopeLabel, scopeFromLabel: scopeFromLabel,
     barModeLabel: barModeLabel, barModeFromLabel: barModeFromLabel,

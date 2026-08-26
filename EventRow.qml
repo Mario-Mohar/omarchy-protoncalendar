@@ -61,15 +61,15 @@ Rectangle {
       if (!root.event) return ""
       if (root.event.allDay) {
         if (!root.showDate) return Model.text("allDay", root.language)
-        var from = Qt.formatDate(root.event.start, "ddd d MMM")
+        var from = Model.formatDate(root.event.start, "ddd d MMM", root.language)
         if (!root.event.multiDay) return from
         var sameMonth = root.event.start.getMonth() === root.event.lastDate.getMonth()
-        return Qt.formatDate(root.event.start, sameMonth ? "ddd d" : "ddd d MMM")
-          + "–" + Qt.formatDate(root.event.lastDate, "ddd d MMM")
+        return Model.formatDate(root.event.start, sameMonth ? "ddd d" : "ddd d MMM", root.language)
+          + "–" + Model.formatDate(root.event.lastDate, "ddd d MMM", root.language)
       }
       var clock = Model.formatTime(root.event.start, root.timeFormat)
       return root.showDate
-        ? Qt.formatDate(root.event.start, "ddd d MMM") + " " + clock
+        ? Model.formatDate(root.event.start, "ddd d MMM", root.language) + " " + clock
         : clock
     }
     color: root.dim
@@ -121,7 +121,7 @@ Rectangle {
     visible: root.event && !root.event.allDay && !root.event.cancelled
     iconText: root.reminderOff ? "󰂛" : "󰂞"
     bordered: root.reminderEditorOpen || !root.reminderInherited
-    tooltipText: root.reminderOff ? "Reminder off"
+    tooltipText: root.reminderOff ? Model.text("reminderOff", root.language)
       : (root.reminderInherited
           ? (root.language === "sv" ? "Påminnelse: standard (" : "Reminder: default (")
           : (root.language === "sv" ? "Påminnelse: " : "Reminder: "))

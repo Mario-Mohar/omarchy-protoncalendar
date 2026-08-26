@@ -65,7 +65,7 @@ Item {
             text: {
               var when = new Date(modelData.year, modelData.month, 1)
               var pattern = modelData.year === root.now.getFullYear() ? "MMMM" : "MMMM yyyy"
-              return Qt.formatDate(when, pattern).toUpperCase()
+              return Model.formatDate(when, pattern, root.language).toUpperCase()
             }
             foreground: root.foreground
             fontFamily: root.fontFamily

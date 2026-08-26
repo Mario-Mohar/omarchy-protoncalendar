@@ -19,6 +19,20 @@ check("Monday week setting", M.normalizedWeekStart("Monday", 0), 1)
 check("week setting name", M.weekStartSettingName(1), "Monday")
 check("Swedish language", M.resolvedLanguage("System", "sv_SE"), "sv")
 check("12-hour clock", M.formatTime(new Date(2026, 7, 17, 13, 5), "12-hour"), "1:05 PM")
+check("Swedish weekday", M.weekdayName(3, false, "sv"), "onsdag")
+check("Swedish short weekday", M.weekdayName(1, true, "sv"), "mån")
+check("Swedish full date", M.formatDate(new Date(2026, 7, 26), "dddd d MMMM yyyy", "sv"),
+  "onsdag 26 augusti 2026")
+check("Swedish short date", M.formatDate(new Date(2026, 7, 26), "ddd d MMM", "sv"),
+  "ons 26 aug")
+check("language setting localization",
+  M.languageSettingFromLabel(M.languageSettingLabel("Swedish", "sv")), "Swedish")
+check("clock setting localization",
+  M.timeFormatFromLabel(M.timeFormatLabel("24-hour", "sv")), "24-hour")
+check("sound setting localization", M.soundFromLabel(M.soundLabel("Bell", "sv")), "Bell")
+check("reminder setting localization",
+  M.reminderPresetFromLabel(M.reminderPresetLabel(120, "sv")), 120)
+check("Swedish event count", M.eventCountLabel(3, "sv"), "3 event")
 
 const reminderEvent = payload.events[0]
 const reminderId = M.reminderKey(reminderEvent)

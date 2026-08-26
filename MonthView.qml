@@ -15,6 +15,7 @@ Item {
   property string fontFamily: Style.font.family
   property string nextWeekStartLabel: ""
   property bool showWeekNumbers: true
+  property string language: "en"
 
   signal daySelected(string key)
   signal dayActivated(string key)
@@ -34,7 +35,7 @@ Item {
   implicitHeight: grid.height
 
   function weekdayLabel(weekday) {
-    return String(Qt.locale().dayName(weekday, Locale.ShortFormat)).replace(/\.$/, "").toUpperCase()
+    return Model.weekdayName(weekday, true, root.language).toUpperCase()
   }
 
   Column {
@@ -56,7 +57,7 @@ Item {
 
         Text {
           anchors.centerIn: parent
-          text: "W"
+          text: Model.text("weekAbbreviation", root.language)
           color: weekStartMouse.containsMouse
             ? Style.hoverStateColor(root.foreground, Color.accent)
             : root.fainter
@@ -76,7 +77,7 @@ Item {
 
         PanelToolTip {
           visible: weekStartMouse.containsMouse
-          text: "Start weeks on " + root.nextWeekStartLabel
+          text: Model.text("startWeeksOn", root.language) + " " + root.nextWeekStartLabel
           fontFamily: root.fontFamily
         }
       }

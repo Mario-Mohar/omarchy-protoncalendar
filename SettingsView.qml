@@ -129,13 +129,17 @@ Item {
 
       ButtonGroup {
         width: parent.width - root.labelWidth - Style.space(6)
-        options: ["System", "English", "Swedish"]
-        value: root.languageSetting
+        options: [Model.languageSettingLabel("System", root.resolvedLanguage),
+          Model.languageSettingLabel("English", root.resolvedLanguage),
+          Model.languageSettingLabel("Swedish", root.resolvedLanguage)]
+        value: Model.languageSettingLabel(root.languageSetting, root.resolvedLanguage)
         foreground: root.foreground
         background: Color.background
         fontFamily: root.fontFamily
         fontSize: Style.font.caption
-        onChanged: function (value) { root.preferencesRequested({ language: value }) }
+        onChanged: function (value) {
+          root.preferencesRequested({ language: Model.languageSettingFromLabel(value) })
+        }
       }
     }
 
@@ -155,13 +159,17 @@ Item {
 
       ButtonGroup {
         width: parent.width - root.labelWidth - Style.space(6)
-        options: ["System", "24-hour", "12-hour"]
-        value: root.timeFormat
+        options: [Model.timeFormatLabel("System", root.resolvedLanguage),
+          Model.timeFormatLabel("24-hour", root.resolvedLanguage),
+          Model.timeFormatLabel("12-hour", root.resolvedLanguage)]
+        value: Model.timeFormatLabel(root.timeFormat, root.resolvedLanguage)
         foreground: root.foreground
         background: Color.background
         fontFamily: root.fontFamily
         fontSize: Style.font.caption
-        onChanged: function (value) { root.preferencesRequested({ timeFormat: value }) }
+        onChanged: function (value) {
+          root.preferencesRequested({ timeFormat: Model.timeFormatFromLabel(value) })
+        }
       }
     }
 
@@ -183,7 +191,7 @@ Item {
         id: timezoneField
         width: parent.width - root.labelWidth - setTimezoneButton.width
           - clearTimezoneButton.width - Style.space(18)
-        placeholderText: root.secondaryTimeZone || "Europe/London or UTC"
+        placeholderText: root.secondaryTimeZone || root.label("Europe/London or UTC", "Europe/London eller UTC")
         foreground: root.foreground
         font.family: root.fontFamily
         Keys.onReturnPressed: root.preferencesRequested({ secondaryTimeZone: text })
@@ -215,7 +223,7 @@ Item {
 
     PanelSectionHeader {
       width: parent.width
-      text: "BAR"
+      text: root.label("BAR", "MENYRAD")
       foreground: root.foreground
       fontFamily: root.fontFamily
     }
@@ -322,21 +330,21 @@ Item {
 
       ButtonGroup {
         width: parent.width - root.labelWidth - Style.space(6)
-        options: ["15 min", "30 min", "1 hour", "2 hours"]
-        value: root.reminderMinutes === 15 ? "15 min"
-          : root.reminderMinutes === 30 ? "30 min"
-          : root.reminderMinutes === 60 ? "1 hour"
-          : root.reminderMinutes === 120 ? "2 hours" : ""
+        options: [Model.reminderPresetLabel(15, root.resolvedLanguage),
+          Model.reminderPresetLabel(30, root.resolvedLanguage),
+          Model.reminderPresetLabel(60, root.resolvedLanguage),
+          Model.reminderPresetLabel(120, root.resolvedLanguage)]
+        value: Model.reminderPresetLabel(root.reminderMinutes, root.resolvedLanguage)
         foreground: root.foreground
         background: Color.background
         fontFamily: root.fontFamily
         fontSize: Style.font.caption
         onChanged: function (value) {
-          var values = { "15 min": 15, "30 min": 30, "1 hour": 60, "2 hours": 120 }
-          if (values[value]) {
-            root.preferencesRequested({ reminderMinutesList: [values[value]] })
+          var minutes = Model.reminderPresetFromLabel(value)
+          if (minutes) {
+            root.preferencesRequested({ reminderMinutesList: [minutes] })
             root.save(root.notificationsEnabled,
-              root.notificationSoundEnabled, root.notificationSound, values[value])
+              root.notificationSoundEnabled, root.notificationSound, minutes)
           }
         }
       }
@@ -496,16 +504,20 @@ Item {
 
       ButtonGroup {
         width: parent.width - root.labelWidth - Style.space(6)
-        options: ["Gentle", "Bell", "Chime", "Alarm"]
-        value: root.notificationSound
+        options: [Model.soundLabel("Gentle", root.resolvedLanguage),
+          Model.soundLabel("Bell", root.resolvedLanguage),
+          Model.soundLabel("Chime", root.resolvedLanguage),
+          Model.soundLabel("Alarm", root.resolvedLanguage)]
+        value: Model.soundLabel(root.notificationSound, root.resolvedLanguage)
         foreground: root.foreground
         background: Color.background
         fontFamily: root.fontFamily
         fontSize: Style.font.caption
         onChanged: function (value) {
+          var sound = Model.soundFromLabel(value)
           root.save(root.notificationsEnabled, root.notificationSoundEnabled,
-            value, root.reminderMinutes)
-          root.soundPreviewRequested(value)
+            sound, root.reminderMinutes)
+          root.soundPreviewRequested(sound)
         }
       }
 

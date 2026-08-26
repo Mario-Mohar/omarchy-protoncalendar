@@ -32,10 +32,10 @@ Rectangle {
   function whenText() {
     if (!root.event) return ""
     if (root.event.allDay) {
-      var start = Qt.formatDate(root.event.start, "ddd d MMM")
-      return root.event.multiDay ? start + " – " + Qt.formatDate(root.event.lastDate, "ddd d MMM") : start
+      var start = Model.formatDate(root.event.start, "ddd d MMM", root.language)
+      return root.event.multiDay ? start + " – " + Model.formatDate(root.event.lastDate, "ddd d MMM", root.language) : start
     }
-    return Qt.formatDate(root.event.start, "ddd d MMM") + " · "
+    return Model.formatDate(root.event.start, "ddd d MMM", root.language) + " · "
       + Model.formatTime(root.event.start, root.timeFormat) + "–"
       + Model.formatTime(root.event.end, root.timeFormat)
   }

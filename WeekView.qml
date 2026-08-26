@@ -16,6 +16,7 @@ Item {
   property string fontFamily: Style.font.family
   property bool dayMode: false
   property string timeFormat: "24-hour"
+  property string language: "en"
 
   signal eventActivated(var event)
   signal dayActivated(string key)
@@ -84,8 +85,7 @@ Item {
           Text {
             id: dayName
             anchors.horizontalCenter: parent.horizontalCenter
-            text: String(Qt.locale().dayName(modelData.weekday, Locale.ShortFormat))
-              .replace(/\.$/, "").toUpperCase()
+            text: Model.weekdayName(modelData.weekday, true, root.language).toUpperCase()
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption

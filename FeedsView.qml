@@ -101,7 +101,7 @@ Item {
             Text {
               width: parent.width
               textFormat: Text.PlainText
-              text: feedRow.modelData.name || "Calendar"
+              text: feedRow.modelData.name || Model.text("calendar", root.language)
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.bodySmall
@@ -116,12 +116,14 @@ Item {
                 if (data.error) return data.error
                 if (data.skipped) return root.label("Hidden · sync paused", "Dold · synk pausad")
                 var count = data.count === undefined ? 0 : data.count
-                var status = count === 1 ? "1 event" : count + root.label(" events", " event")
+                var status = Model.eventCountLabel(count, root.language)
                 if (data.lastUpdatedAt) {
                   var updated = new Date(data.lastUpdatedAt)
                   status += " · " + Model.formatTime(updated, "24-hour")
                 }
-                return status + (data.secretStored ? " · keyring" : " · private file")
+                return status + (data.secretStored
+                  ? root.label(" · keyring", " · nyckelring")
+                  : root.label(" · private file", " · privat fil"))
               }
               color: feedRow.modelData.error ? Color.urgent : root.dim
               font.family: root.fontFamily
@@ -212,7 +214,7 @@ Item {
               id: nameField
               width: parent.width - colorField.width - reminderField.width - saveButton.width
                 - defaultButton.width - Style.space(20)
-              placeholderText: feedRow.modelData.name || "Calendar name"
+              placeholderText: feedRow.modelData.name || root.label("Calendar name", "Kalendernamn")
               foreground: root.foreground
               font.family: root.fontFamily
             }
@@ -230,7 +232,7 @@ Item {
               width: Style.space(74)
               placeholderText: feedRow.modelData.reminderMinutes === null
                 || feedRow.modelData.reminderMinutes === undefined
-                ? "default" : String(feedRow.modelData.reminderMinutes)
+                ? root.label("default", "standard") : String(feedRow.modelData.reminderMinutes)
               inputMethodHints: Qt.ImhDigitsOnly
               foreground: root.foreground
               font.family: root.fontFamily
@@ -284,7 +286,7 @@ Item {
         enabled: !root.busy
         echoMode: TextInput.Password
         placeholderText: root.configured
-          ? "Paste another private share link…"
+          ? root.label("Paste another private share link…", "Klistra in ytterligare en privat delningslänk…")
           : "https://calendar.proton.me/api/calendar/v1/url/…"
         foreground: root.foreground
         font.family: root.fontFamily

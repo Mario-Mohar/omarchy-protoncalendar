@@ -18,7 +18,7 @@ Item {
   property bool syncing: syncProcess.running || feedProcess.running
   property bool everLoaded: false
 
-  readonly property string feedError: Model.firstFeedError(feeds)
+  readonly property string feedError: Model.firstFeedError(feeds, language)
   readonly property var nextRefreshAt: generatedAt
     ? new Date(generatedAt.getTime() + refreshIntervalSec * 1000) : null
 
@@ -119,7 +119,7 @@ Item {
 
   function previewSound(value) {
     Quickshell.execDetached(["canberra-gtk-play", "--id", soundId(value),
-      "--description", "Proton Calendar reminder"])
+      "--description", language === "sv" ? "Proton Calendar-påminnelse" : "Proton Calendar reminder"])
   }
 
   function checkReminders() {
@@ -195,8 +195,8 @@ Item {
     var end = new Date(start.getTime() + 1800000)
     root.testEvent = Model.parseEvent({
       uid: "protoncalendar-notification-test-" + start.getTime(),
-      title: "Proton Calendar test",
-      location: "Notification test",
+      title: language === "sv" ? "Proton Calendar-test" : "Proton Calendar test",
+      location: language === "sv" ? "Notistest" : "Notification test",
       start: start.toISOString(),
       end: end.toISOString(),
       allDay: false
@@ -309,7 +309,8 @@ Item {
     stdout: StdioCollector { id: syncStdout; waitForEnd: true }
     onExited: function (exitCode) {
       if (exitCode === 0) root.apply(String(syncStdout.text || ""))
-      else root.error = "sync failed (exit " + exitCode + ")"
+      else root.error = language === "sv" ? "synkronisering misslyckades (kod " + exitCode + ")"
+        : "sync failed (exit " + exitCode + ")"
     }
   }
 

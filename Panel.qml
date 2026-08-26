@@ -53,7 +53,7 @@ Panel {
   }
 
   readonly property int weekStart: Model.normalizedWeekStart(setting("weekStartDay", "Sunday"), 0)
-  readonly property string nextWeekStartLabel: Qt.locale().dayName(Model.toggledWeekStart(weekStart), Locale.LongFormat)
+  readonly property string nextWeekStartLabel: Model.weekdayName(Model.toggledWeekStart(weekStart), false, language)
   readonly property bool showWeekNumbers: {
     var value = setting("showWeekNumbers", true)
     return value === true || String(value).toLowerCase() === "true" || String(value) === "1"
@@ -81,11 +81,11 @@ Panel {
     if (!service) return ""
     if (service.error !== "") return service.error
     if (service.feedError !== "") return service.feedError
-    if (service.stale) return "Showing the last good copy — refresh failed."
+    if (service.stale) return Model.text("lastGoodCopy", language)
     if (!service.generatedAt) return ""
-    var result = "Updated " + Model.formatTime(service.generatedAt, timeFormat)
+    var result = Model.text("updated", language) + " " + Model.formatTime(service.generatedAt, timeFormat)
     if (service.nextRefreshAt)
-      result += " · next " + Model.formatTime(service.nextRefreshAt, timeFormat)
+      result += " · " + Model.text("nextRefresh", language) + " " + Model.formatTime(service.nextRefreshAt, timeFormat)
     return result
   }
 
@@ -99,10 +99,10 @@ Panel {
       return count === 0 ? Model.text("upcoming", language)
         : Model.text("upcoming", language) + " · " + count
     }
-    if (viewingDay) return Qt.formatDate(viewDay, "dddd d MMMM yyyy")
-    if (viewingMonth) return Qt.formatDate(new Date(viewYear, viewMonth, 1), "MMMM yyyy")
+    if (viewingDay) return Model.formatDate(viewDay, "dddd d MMMM yyyy", language)
+    if (viewingMonth) return Model.formatDate(new Date(viewYear, viewMonth, 1), "MMMM yyyy", language)
     return Model.text("week", language) + " " + Model.weekNumberOf(viewWeek, weekStart) + " · "
-      + Qt.formatDate(weekDayList[0].date, "MMM yyyy")
+      + Model.formatDate(weekDayList[0].date, "MMM yyyy", language)
   }
 
   function open() {
@@ -226,10 +226,11 @@ Panel {
 
   function whenText(event) {
     if (!event) return ""
-    if (!event.allDay) return Qt.formatDateTime(event.start, "ddd d MMM HH:mm")
-    var from = Qt.formatDate(event.start, "ddd d MMM")
+    if (!event.allDay) return Model.formatDate(event.start, "ddd d MMM", language) + " "
+      + Model.formatTime(event.start, timeFormat)
+    var from = Model.formatDate(event.start, "ddd d MMM", language)
     if (!event.multiDay) return from
-    return from + " – " + Qt.formatDate(event.lastDate, "ddd d MMM")
+    return from + " – " + Model.formatDate(event.lastDate, "ddd d MMM", language)
   }
 
   function openEvent(event) {
@@ -319,7 +320,7 @@ Panel {
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
             title: root.nextEvent ? root.nextEvent.title
-              : (root.language === "sv" ? "Inget kommande" : "Nothing coming up")
+              : Model.text("nothingComingUp", root.language)
             meta: {
               if (!root.nextEvent) return ""
               var relative = root.service ? root.service.nextRelative : ""
@@ -513,8 +514,9 @@ Panel {
                 anchors.verticalCenter: parent.verticalCenter
                 iconText: "󰅁"
                 visible: !root.viewingAgenda
-                tooltipText: root.viewingMonth ? "Previous month"
-                  : (root.viewingWeek ? "Previous week" : "Previous day")
+                tooltipText: root.viewingMonth ? Model.text("previousMonth", root.language)
+                  : (root.viewingWeek ? Model.text("previousWeek", root.language)
+                    : Model.text("previousDay", root.language))
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 onClicked: root.step(-1)
@@ -542,8 +544,9 @@ Panel {
                 anchors.verticalCenter: parent.verticalCenter
                 iconText: "󰅂"
                 visible: !root.viewingAgenda
-                tooltipText: root.viewingMonth ? "Next month"
-                  : (root.viewingWeek ? "Next week" : "Next day")
+                tooltipText: root.viewingMonth ? Model.text("nextMonth", root.language)
+                  : (root.viewingWeek ? Model.text("nextWeek", root.language)
+                    : Model.text("nextDay", root.language))
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 onClicked: root.step(1)
@@ -559,7 +562,8 @@ Panel {
               PanelActionButton {
                 anchors.verticalCenter: parent.verticalCenter
                 iconText: root.barMode === "Off" ? "󰛐" : "󰛑"
-                tooltipText: "Bar: " + root.nextBarMode.toLowerCase()
+                tooltipText: Model.text("bar", root.language) + ": "
+                  + Model.barModeLabel(root.nextBarMode, root.language).toLowerCase()
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 onClicked: root.cycleBarLabel()
@@ -569,7 +573,7 @@ Panel {
                 anchors.verticalCenter: parent.verticalCenter
                 iconText: "󰥔"
                 visible: !root.atToday
-                tooltipText: "Back to today"
+                tooltipText: Model.text("backToday", root.language)
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 onClicked: root.goToToday()
@@ -578,7 +582,8 @@ Panel {
               PanelActionButton {
                 anchors.verticalCenter: parent.verticalCenter
                 iconText: "󰑐"
-                tooltipText: root.service && root.service.syncing ? "Refreshing…" : "Refresh"
+                tooltipText: root.service && root.service.syncing
+                  ? Model.text("refreshing", root.language) : Model.text("refresh", root.language)
                 enabled: !(root.service && root.service.syncing)
                 opacity: enabled ? 1.0 : 0.45
                 foreground: root.contentForeground
@@ -589,7 +594,7 @@ Panel {
               PanelActionButton {
                 anchors.verticalCenter: parent.verticalCenter
                 iconText: "󰐕"
-                tooltipText: "New event"
+                tooltipText: Model.text("newEvent", root.language)
                 bordered: true
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
@@ -599,7 +604,8 @@ Panel {
               PanelActionButton {
                 anchors.verticalCenter: parent.verticalCenter
                 iconText: "󰒓"
-                tooltipText: root.settingsOpen ? "Hide settings" : "Settings"
+                tooltipText: root.settingsOpen ? Model.text("hideSettings", root.language)
+                  : Model.text("settings", root.language)
                 bordered: root.settingsOpen
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
@@ -636,6 +642,7 @@ Panel {
               fontFamily: root.contentFontFamily
               nextWeekStartLabel: root.nextWeekStartLabel
               showWeekNumbers: root.showWeekNumbers
+              language: root.language
               onDaySelected: function (key) { root.selectedKey = key }
               onDayActivated: function (key) {
                 root.selectedKey = key
@@ -675,6 +682,7 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               timeFormat: root.timeFormat
+              language: root.language
               onEventActivated: function (event) { root.openEvent(event) }
               onDayActivated: function (key) {
                 root.selectedKey = key
@@ -697,6 +705,7 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               timeFormat: root.timeFormat
+              language: root.language
               onEventActivated: function (event) { root.openEvent(event) }
               onDayActivated: function (key) { root.selectedKey = key }
             }
@@ -730,7 +739,8 @@ Panel {
 
             PanelSectionHeader {
               width: parent.width
-              text: Qt.formatDate(Model.parseStamp(root.selectedKey) || root.today, "dddd d MMMM").toUpperCase()
+              text: Model.formatDate(Model.parseStamp(root.selectedKey) || root.today,
+                "dddd d MMMM", root.language).toUpperCase()
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
             }

@@ -28,13 +28,12 @@ BarWidget {
     if (barMode === "Off") return ""
     if (barMode === "Today count") {
       var count = calendar.todayEvents.length
-      return count + (count === 1 ? " event" : (calendar.language === "sv" ? " event" : " events"))
+      return Model.eventCountLabel(count, calendar.language)
     }
     if (barMode === "Privacy") return currentEvent || calendar.todayEvents.length
-      ? (calendar.language === "sv" ? "Upptagen" : "Busy")
-      : (calendar.language === "sv" ? "Ledig" : "Free")
+      ? Model.text("busy", calendar.language) : Model.text("free", calendar.language)
     if (barMode === "Current event") {
-      if (!currentEvent) return calendar.language === "sv" ? "Ledig" : "Free"
+      if (!currentEvent) return Model.text("free", calendar.language)
       var currentTitle = currentEvent.title
       return currentTitle.length > 22 ? currentTitle.substring(0, 21) + "…" : currentTitle
     }
@@ -50,14 +49,12 @@ BarWidget {
   }
 
   readonly property string tooltip: {
-    if (!calendar.configured) return calendar.language === "sv"
-      ? "Proton Calendar — ingen kalender tillagd" : "Proton Calendar — no feed added yet"
+    if (!calendar.configured) return Model.text("noFeed", calendar.language)
     if (calendar.feedError !== "") return calendar.feedError
     if (barMode === "Privacy") return currentEvent || calendar.todayEvents.length
-      ? (calendar.language === "sv" ? "Upptagen" : "Busy")
-      : (calendar.language === "sv" ? "Ledig" : "Free")
+      ? Model.text("busy", calendar.language) : Model.text("free", calendar.language)
     var event = calendar.nextEvent
-    if (!event) return calendar.language === "sv" ? "Inget kommande" : "Nothing coming up"
+    if (!event) return Model.text("nothingComingUp", calendar.language)
     var relative = calendar.nextRelative
     return event.title + "\n" + root.whenText(event)
       + (relative ? " · " + relative : "")
@@ -66,11 +63,11 @@ BarWidget {
 
   function whenText(event) {
     if (!event) return ""
-    if (!event.allDay) return Qt.formatDate(event.start, "ddd d MMM") + " "
+    if (!event.allDay) return Model.formatDate(event.start, "ddd d MMM", calendar.language) + " "
       + Model.formatTime(event.start, calendar.timeFormat)
-    var from = Qt.formatDate(event.start, "ddd d MMM")
+    var from = Model.formatDate(event.start, "ddd d MMM", calendar.language)
     if (!event.multiDay) return from
-    return from + " – " + Qt.formatDate(event.lastDate, "ddd d MMM")
+    return from + " – " + Model.formatDate(event.lastDate, "ddd d MMM", calendar.language)
   }
 
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
@@ -125,12 +122,12 @@ BarWidget {
     function refresh(): void { root.broadcast("refresh") }
     function next(): string {
       var event = calendar.nextEvent
-      if (!event) return "Nothing coming up"
+      if (!event) return Model.text("nothingComingUp", calendar.language)
       return root.whenText(event) + "  " + event.title
     }
     function today(): string {
       var list = calendar.todayEvents
-      if (!list.length) return "Nothing today"
+      if (!list.length) return Model.text("nothingToday", calendar.language)
       var lines = []
       for (var i = 0; i < list.length; i++) {
         var event = list[i]
@@ -145,7 +142,7 @@ BarWidget {
     function testReminder(): void { calendar.scheduleTestReminder() }
     function upcoming(): string {
       var list = Model.upcoming(calendar.events, calendar.now)
-      if (!list.length) return "Nothing coming up"
+      if (!list.length) return Model.text("nothingComingUp", calendar.language)
       var lines = []
       for (var i = 0; i < list.length; i++)
         lines.push(root.whenText(list[i]) + "  " + list[i].title)

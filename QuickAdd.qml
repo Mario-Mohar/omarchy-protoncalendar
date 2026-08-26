@@ -173,8 +173,8 @@ Item {
     Text {
       width: parent.width
       text: {
-        var when = root.dateKey === "" ? "the selected day"
-          : Qt.formatDate(Model.parseStamp(root.dateKey), "ddd d MMM")
+        var when = root.dateKey === "" ? Model.text("selectedDay", root.language)
+          : Model.formatDate(Model.parseStamp(root.dateKey), "ddd d MMM", root.language)
         if (!root.valid && titleField.text === "")
           return root.label("Proton has no write API — the details are copied and the web app opens on the day.",
             "Proton saknar skriv-API — detaljerna kopieras och webbappen öppnas på rätt dag.")
