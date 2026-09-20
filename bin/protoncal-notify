@@ -1,9 +1,62 @@
 #!/usr/bin/env python3
+import fcntl
 import json
 import os
 import subprocess
 import sys
 import time
+
+# A bar surface exists per monitor, and every one of them runs its own copy of
+# the widget with its own reminder timer -- so a single reminder arrives here
+# once per screen, a few milliseconds apart. The widget cannot dedupe that
+# itself: each instance only knows what it fired. This file is the shared
+# memory. First caller to record a reminder shows it, the rest exit quietly.
+# It also covers a shell restart inside the five-minute window the widget
+# fires in, where the in-memory record of what was announced is gone.
+STATE_DIR = os.path.expanduser("~/.cache/omarchy/protoncalendar")
+STATE_FILE = os.path.join(STATE_DIR, "notified.json")
+CLAIM_SECONDS = 300
+
+
+def claim(summary, body):
+    """Record this reminder and report whether it is ours to show.
+
+    Never raises: an unwritable state directory or a hand-edited file means a
+    duplicate notification, which beats a reminder that never arrives.
+    """
+    key = summary + "\x00" + body
+    now = time.time()
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        fd = os.open(STATE_FILE, os.O_RDWR | os.O_CREAT, 0o600)
+    except OSError:
+        return True
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            raw = os.read(fd, 1 << 20).decode("utf-8")
+            seen = json.loads(raw) if raw.strip() else {}
+        except (OSError, ValueError, UnicodeDecodeError):
+            seen = {}
+        if not isinstance(seen, dict):
+            seen = {}
+        fresh = {}
+        for name, stamp in seen.items():
+            if isinstance(stamp, (int, float)) and 0 <= now - stamp < CLAIM_SECONDS:
+                fresh[name] = stamp
+        if key in fresh:
+            return False
+        fresh[key] = now
+        data = json.dumps(fresh).encode("utf-8")
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            os.write(fd, data)
+            os.ftruncate(fd, len(data))
+        except OSError:
+            pass
+        return True
+    finally:
+        os.close(fd)
 
 
 def worker(payload):
@@ -19,6 +72,9 @@ def worker(payload):
     snooze_5_label = "Skjut upp 5 min" if swedish else "Snooze 5 min"
     snooze_15_label = "Skjut upp 15 min" if swedish else "Snooze 15 min"
     dismiss_label = "Stäng" if swedish else "Dismiss"
+    dry_run = os.environ.get("PROTONCAL_NOTIFY_DRY_RUN") == "1"
+    if not dry_run and not claim(summary, body):
+        return
     while True:
         command = [
             "notify-send", "--app-name=Proton Calendar", "--wait",
@@ -28,7 +84,7 @@ def worker(payload):
         if icon:
             command.append("--icon=" + icon)
         command.extend([summary, body])
-        if os.environ.get("PROTONCAL_NOTIFY_DRY_RUN") == "1":
+        if dry_run:
             print(json.dumps(command, ensure_ascii=False))
             return
         result = subprocess.run(command, capture_output=True, text=True)
