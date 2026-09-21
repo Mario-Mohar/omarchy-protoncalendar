@@ -6,6 +6,22 @@ app.
 
 ![Preview](preview-v2.png)
 
+## What's new in 0.4.2
+
+- The panel closes again. `close()` threw on the bar's read-only
+  `centerHoverRevealSuppressed` property and never reached `hide()`, which left
+  the panel stuck open and the bar unresponsive (#5, #6)
+- A reminder is shown once, not once per monitor. Every bar surface runs its own
+  copy of the widget, so a reminder reached the notifier once per screen; the
+  notifier now claims each reminder in a lock-guarded state file (#7, #8)
+- The reminder sound follows the same claim, so it is heard once per reminder
+  burst instead of once per screen, and two reminders due in the same sweep no
+  longer play over each other
+- Previewing an alarm sound in settings no longer stacks: the most recent click
+  wins (#3)
+- Event search matches word by word and ignores spacing, so `my company` finds
+  `mycompany` and the other way round (#3)
+
 ## What's new in 0.4.1
 
 - Complete Swedish localization across weekdays, months, dates, navigation,
