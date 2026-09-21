@@ -137,7 +137,6 @@ Item {
   function checkReminders() {
     if (!notificationsEnabled || !events) return
     var stamp = now.getTime()
-    var soundNeeded = false
     for (var i = 0; i < events.length; i++) {
       var event = events[i]
       if (!event || event.cancelled) continue
@@ -169,20 +168,22 @@ Item {
         var when = event.allDay ? Model.text("allDay", language)
           : Model.formatTime(event.start, timeFormat)
         var body = when + (event.location ? " · " + event.location : "")
-        sendNotification(event, body, 0)
-        soundNeeded = true
+        sendNotification(event, body, 0, notificationSoundEnabled ? soundId(notificationSound) : "")
       }
     }
-    if (soundNeeded && notificationSoundEnabled) previewSound(notificationSound)
   }
 
-  function sendNotification(event, body, delaySeconds) {
+  // A bar surface exists per monitor, so this runs once per screen for one
+  // reminder. protoncal-notify is the only place that sees all of those, so the
+  // sound goes with the payload and is played by whichever copy wins the claim.
+  function sendNotification(event, body, delaySeconds, sound) {
     var payload = JSON.stringify({
       title: event ? event.title : "Proton Calendar",
       body: String(body || ""),
       icon: assetPath("proton-calendar.svg"),
       url: webUrlFor(event),
       language: language,
+      sound: String(sound || ""),
       delaySeconds: Math.max(0, Number(delaySeconds || 0))
     })
     notificationQueue = notificationQueue.concat([payload])

@@ -16,16 +16,19 @@ import time
 STATE_DIR = os.path.expanduser("~/.cache/omarchy/protoncalendar")
 STATE_FILE = os.path.join(STATE_DIR, "notified.json")
 CLAIM_SECONDS = 300
+# The sound is claimed separately and briefly: long enough that one reminder
+# cannot be heard once per screen, and that two reminders due in the same sweep
+# play one sound rather than two on top of each other, but short enough that
+# reminders genuinely minutes apart each get their own.
+SOUND_CLAIM_SECONDS = 5
 
 
-def claim(summary, body):
-    """Record this reminder and report whether it is ours to show.
+def claim(key, seconds=CLAIM_SECONDS):
+    """Record this key and report whether it is ours to act on.
 
     Never raises: an unwritable state directory or a hand-edited file means a
     duplicate notification, which beats a reminder that never arrives.
     """
-    key = summary + "\x00" + body
-    now = time.time()
     try:
         os.makedirs(STATE_DIR, exist_ok=True)
         fd = os.open(STATE_FILE, os.O_RDWR | os.O_CREAT, 0o600)
@@ -33,6 +36,10 @@ def claim(summary, body):
         return True
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
+        # After the lock, never before: a copy that read the clock while it was
+        # still waiting would see the winner's entry dated after its own "now",
+        # discard it as a clock jump, and show the notification a second time.
+        now = time.time()
         try:
             raw = os.read(fd, 1 << 20).decode("utf-8")
             seen = json.loads(raw) if raw.strip() else {}
@@ -41,12 +48,12 @@ def claim(summary, body):
         if not isinstance(seen, dict):
             seen = {}
         fresh = {}
-        for name, stamp in seen.items():
-            if isinstance(stamp, (int, float)) and 0 <= now - stamp < CLAIM_SECONDS:
-                fresh[name] = stamp
+        for name, expiry in seen.items():
+            if isinstance(expiry, (int, float)) and now < expiry <= now + CLAIM_SECONDS:
+                fresh[name] = expiry
         if key in fresh:
             return False
-        fresh[key] = now
+        fresh[key] = now + seconds
         data = json.dumps(fresh).encode("utf-8")
         try:
             os.lseek(fd, 0, os.SEEK_SET)
@@ -59,6 +66,19 @@ def claim(summary, body):
         os.close(fd)
 
 
+def play(sound, swedish):
+    """Play the reminder sound, detached. A missing canberra is not fatal."""
+    description = "Proton Calendar-påminnelse" if swedish else "Proton Calendar reminder"
+    try:
+        subprocess.Popen(
+            ["canberra-gtk-play", "--id", sound, "--description", description],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        pass
+
+
 def worker(payload):
     delay = max(0, int(payload.get("delaySeconds", 0)))
     if delay:
@@ -67,14 +87,17 @@ def worker(payload):
     body = str(payload.get("body", ""))
     icon = str(payload.get("icon", ""))
     url = str(payload.get("url", ""))
+    sound = str(payload.get("sound", ""))
     swedish = payload.get("language") == "sv"
     open_label = "Öppna i Proton" if swedish else "Open in Proton"
     snooze_5_label = "Skjut upp 5 min" if swedish else "Snooze 5 min"
     snooze_15_label = "Skjut upp 15 min" if swedish else "Snooze 15 min"
     dismiss_label = "Stäng" if swedish else "Dismiss"
     dry_run = os.environ.get("PROTONCAL_NOTIFY_DRY_RUN") == "1"
-    if not dry_run and not claim(summary, body):
+    if not dry_run and not claim("notify\x00" + summary + "\x00" + body):
         return
+    if sound and not dry_run and claim("sound", SOUND_CLAIM_SECONDS):
+        play(sound, swedish)
     while True:
         command = [
             "notify-send", "--app-name=Proton Calendar", "--wait",

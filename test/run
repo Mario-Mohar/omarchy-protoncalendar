@@ -275,6 +275,81 @@ shown=$(wc -l < "$NOTIFY_LOG")
 [ "$shown" = "2" ] || { echo "   a different reminder was swallowed"; exit 1; }
 echo "   3 copies of one reminder: 1 notification, other reminders unaffected"
 
+echo "== the claim is stamped after the lock, not before"
+mkdir -p "$work/slow-home"
+: > "$NOTIFY_LOG"
+# The stamp a copy records has to come from a clock it read while holding the
+# lock. Read before, and a copy that queued behind the winner dates its entry
+# earlier than the winner's, prunes it as a clock jump, and shows the reminder
+# a second time -- which is how the duplicate came back on a busy machine.
+SLOW_HOME="$work/slow-home" NOTIFY_LOG="$NOTIFY_LOG" \
+  STUB_PATH="$work/stub:$PATH" NOTIFY_BIN="$root/bin/protoncal-notify" python3 -c "
+import fcntl, json, os, re, subprocess, sys, time
+
+window = int(re.search(r'^CLAIM_SECONDS = (\\d+)', open(os.environ['NOTIFY_BIN']).read(),
+                       re.M).group(1))
+home = os.environ['SLOW_HOME']
+state_dir = os.path.join(home, '.cache', 'omarchy', 'protoncalendar')
+os.makedirs(state_dir, exist_ok=True)
+state = os.path.join(state_dir, 'notified.json')
+fd = os.open(state, os.O_RDWR | os.O_CREAT, 0o600)
+fcntl.flock(fd, fcntl.LOCK_EX)
+copy = subprocess.Popen([sys.executable, os.environ['NOTIFY_BIN'], '--worker'],
+                        stdin=subprocess.PIPE,
+                        env=dict(os.environ, HOME=home, PATH=os.environ['STUB_PATH']))
+copy.stdin.write(b'{\"title\":\"Standup\",\"body\":\"09:00\"}\n')
+copy.stdin.close()
+time.sleep(1.5)          # the copy is queued on the lock, clock already ticking
+released = time.time()
+fcntl.flock(fd, fcntl.LOCK_UN)
+os.close(fd)
+copy.wait()
+
+entries = json.load(open(state))
+assert entries, 'the copy recorded no claim'
+stamped = min(expiry - window for expiry in entries.values())
+if stamped < released:
+    print('   clock read %.2fs before the lock was released' % (released - stamped))
+    sys.exit(1)
+"
+echo "   a copy queued 1.5s on the lock stamps its claim after acquiring it"
+
+echo "== the reminder sound is heard once per burst, not once per screen"
+mkdir -p "$work/sound-home"
+cat > "$work/stub/canberra-gtk-play" <<'STUB'
+#!/usr/bin/env bash
+echo "played" >> "$SOUND_LOG"
+STUB
+chmod +x "$work/stub/canberra-gtk-play"
+export SOUND_LOG="$work/sound.log"
+: > "$SOUND_LOG"
+: > "$NOTIFY_LOG"
+copies=()
+for _ in 1 2 3; do
+  printf '%s\n' '{"title":"Standup","body":"09:00","sound":"alarm-clock-elapsed"}' \
+    | env HOME="$work/sound-home" PATH="$work/stub:$PATH" \
+      NOTIFY_LOG="$NOTIFY_LOG" SOUND_LOG="$SOUND_LOG" \
+      python3 "$root/bin/protoncal-notify" --worker &
+  copies+=($!)
+done
+wait "${copies[@]}"
+# canberra is launched detached, so give it a moment to reach the stub.
+sleep 1
+played=$(wc -l < "$SOUND_LOG")
+[ "$played" = "1" ] || { echo "   three copies played $played sounds"; exit 1; }
+# A second reminder due in the same sweep: its own notification, but it does
+# not start a second sound on top of the first.
+printf '%s\n' '{"title":"Retro","body":"10:00","sound":"alarm-clock-elapsed"}' \
+  | env HOME="$work/sound-home" PATH="$work/stub:$PATH" \
+    NOTIFY_LOG="$NOTIFY_LOG" SOUND_LOG="$SOUND_LOG" \
+    python3 "$root/bin/protoncal-notify" --worker
+sleep 1
+shown=$(wc -l < "$NOTIFY_LOG")
+played=$(wc -l < "$SOUND_LOG")
+[ "$shown" = "2" ] || { echo "   the second reminder was swallowed"; exit 1; }
+[ "$played" = "1" ] || { echo "   sounds overlapped: $played"; exit 1; }
+echo "   3 copies of one reminder: 1 sound, and no second sound over it"
+
 echo "== quick add prefill keeps the title out of argv"
 open_url=$(PROTONCAL_TITLE='Team sync' "$root/bin/protoncal-open" --date 2026-08-17 \
   --time 09:30 --title-env --prefill --print)
