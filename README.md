@@ -6,6 +6,12 @@ app.
 
 ![Preview](preview-v2.png)
 
+## What's new in 0.4.3
+
+- The panel notices when the shell is still running a cached older version of
+  it after an update, and offers a one-click shell restart
+- `Updating` section in the README: `omarchy plugin update` alone is not enough
+
 ## What's new in 0.4.2
 
 - The panel closes again. `close()` threw on the bar's read-only
@@ -88,6 +94,24 @@ omarchy plugin add https://github.com/itsmoorgrove/omarchy-protoncalendar --enab
 
 Then open the panel and paste your calendar's share link (Proton Calendar →
 Settings → Calendars → your calendar → Share → Share with anyone).
+
+## Updating
+
+```bash
+omarchy plugin update io.github.itsmoorgrove.protoncalendar
+omarchy restart shell
+```
+
+The restart is not optional. Omarchy reloads a plugin's bar widget when the
+files change, but the panel QML stays in the QML engine's in-memory component
+cache, so the old code keeps running until the shell is restarted — a fixed
+panel can still behave like the broken one, and the shell log keeps reporting
+errors against line numbers from the version you just replaced.
+
+From 0.4.3 the panel notices this itself: it compares the version compiled into
+it against `manifest.json` on disk, and if they disagree it shows a notice with
+a restart button. That check can only run once the new code is loaded, so the
+update *into* 0.4.3 still needs the restart above.
 
 ## Features
 

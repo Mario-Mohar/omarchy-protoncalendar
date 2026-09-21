@@ -35,6 +35,8 @@ var TEXT = {
     nothingComingUp: "Nothing coming up", nothingToday: "Nothing today",
     previousDay: "Previous day", previousMonth: "Previous month", previousWeek: "Previous week",
     reminderOff: "Reminder off", selectedDay: "the selected day", startWeeksOn: "Start weeks on",
+    restartShell: "Restart shell",
+    staleCode: "Update installed. The shell is still running the old version.",
     updated: "Updated", weekAbbreviation: "W"
   },
   sv: {
@@ -55,6 +57,8 @@ var TEXT = {
     nothingComingUp: "Inget kommande", nothingToday: "Inget idag",
     previousDay: "Föregående dag", previousMonth: "Föregående månad", previousWeek: "Föregående vecka",
     reminderOff: "Påminnelse av", selectedDay: "den valda dagen", startWeeksOn: "Starta veckor på",
+    restartShell: "Starta om shell",
+    staleCode: "Uppdatering installerad. Shellen kör fortfarande den gamla versionen.",
     updated: "Uppdaterad", weekAbbreviation: "V"
   }
 }

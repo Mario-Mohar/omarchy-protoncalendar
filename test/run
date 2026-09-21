@@ -350,6 +350,23 @@ played=$(wc -l < "$SOUND_LOG")
 [ "$played" = "1" ] || { echo "   sounds overlapped: $played"; exit 1; }
 echo "   3 copies of one reminder: 1 sound, and no second sound over it"
 
+echo "== the panel's compiled-in version matches the manifest"
+# Panel.qml compares this constant against manifest.json on disk to notice it
+# is running from a stale component cache. Let them drift and the panel either
+# cries stale forever or never notices a real update.
+MANIFEST="$root/manifest.json" PANEL="$root/Panel.qml" python3 -c "
+import json, os, re, sys
+manifest = json.load(open(os.environ['MANIFEST']))['version']
+panel = re.search(r'readonly property string panelVersion: \"([^\"]+)\"',
+                  open(os.environ['PANEL']).read())
+if not panel:
+    print('   Panel.qml has no panelVersion constant'); sys.exit(1)
+if panel.group(1) != manifest:
+    print('   Panel.qml says %s, manifest.json says %s' % (panel.group(1), manifest))
+    sys.exit(1)
+print('   both at', manifest)
+"
+
 echo "== quick add prefill keeps the title out of argv"
 open_url=$(PROTONCAL_TITLE='Team sync' "$root/bin/protoncal-open" --date 2026-08-17 \
   --time 09:30 --title-env --prefill --print)

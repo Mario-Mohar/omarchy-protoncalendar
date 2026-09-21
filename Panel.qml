@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
@@ -12,6 +13,39 @@ Panel {
 
   property var anchorItem: null
   property var service: null
+
+  // The shell keeps this file in the QML engine's component cache, so an
+  // update on disk goes on running the old code until the shell restarts --
+  // which is how a fixed panel can still be the broken one. manifest.json is
+  // read as data, never compiled, so it is always what is on disk: a version
+  // there that disagrees with the one compiled in below means this component
+  // is the stale copy. Keep panelVersion in step with manifest.json; test/run
+  // fails if they drift apart.
+  readonly property string panelVersion: "0.4.3"
+  property string diskVersion: ""
+  readonly property bool codeStale: diskVersion !== "" && diskVersion !== panelVersion
+
+  function restartShell() {
+    Quickshell.execDetached(["omarchy-restart-shell"])
+  }
+
+  FileView {
+    id: manifestFile
+    path: String(Qt.resolvedUrl("manifest.json")).replace(/^file:\/\//, "")
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      var version = ""
+      try {
+        version = String(JSON.parse(text()).version || "")
+      } catch (error) {
+        version = ""
+      }
+      root.diskVersion = version
+    }
+    onLoadFailed: root.diskVersion = ""
+    onFileChanged: reload()
+  }
 
   property var hostWidget: null
   readonly property var barIdentity: hostWidget || root
@@ -315,6 +349,40 @@ Panel {
           id: content
           width: Math.max(scroll.width, monthView.implicitWidth, weekView.implicitWidth)
           spacing: Style.space(10)
+
+          Item {
+            width: parent.width
+            visible: root.codeStale
+            height: Math.max(staleText.implicitHeight, restartButton.implicitHeight)
+              + Style.space(12)
+
+            Text {
+              id: staleText
+              anchors.left: parent.left
+              anchors.right: restartButton.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              textFormat: Text.PlainText
+              text: Model.text("staleCode", root.language)
+                + " " + root.panelVersion + " \u2192 " + root.diskVersion
+              color: Color.urgent
+              wrapMode: Text.WordWrap
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            Button {
+              id: restartButton
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              text: Model.text("restartShell", root.language)
+              bordered: true
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+              fontSize: Style.font.caption
+              onClicked: root.restartShell()
+            }
+          }
 
           PanelHero {
             width: parent.width
