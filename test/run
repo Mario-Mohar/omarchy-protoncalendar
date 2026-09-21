@@ -246,6 +246,35 @@ assert '--action=dismiss=Dismiss' in command, command
 print('   actions:', 4)
 "
 
+echo "== one reminder shown once, however many bar surfaces fired it"
+mkdir -p "$work/stub" "$work/notify-home"
+cat > "$work/stub/notify-send" <<'STUB'
+#!/usr/bin/env bash
+echo "shown" >> "$NOTIFY_LOG"
+STUB
+chmod +x "$work/stub/notify-send"
+export NOTIFY_LOG="$work/notify.log"
+: > "$NOTIFY_LOG"
+# One bar surface per monitor, each with its own reminder timer, all firing
+# within a few milliseconds of each other.
+copies=()
+for _ in 1 2 3; do
+  printf '%s\n' '{"title":"Standup","body":"09:00"}' \
+    | env HOME="$work/notify-home" PATH="$work/stub:$PATH" NOTIFY_LOG="$NOTIFY_LOG" \
+      python3 "$root/bin/protoncal-notify" --worker &
+  copies+=($!)
+done
+# Named, not a bare `wait`: the fixture server is a background job too.
+wait "${copies[@]}"
+shown=$(wc -l < "$NOTIFY_LOG")
+[ "$shown" = "1" ] || { echo "   three copies produced $shown notifications"; exit 1; }
+printf '%s\n' '{"title":"Retro","body":"10:00"}' \
+  | env HOME="$work/notify-home" PATH="$work/stub:$PATH" NOTIFY_LOG="$NOTIFY_LOG" \
+    python3 "$root/bin/protoncal-notify" --worker
+shown=$(wc -l < "$NOTIFY_LOG")
+[ "$shown" = "2" ] || { echo "   a different reminder was swallowed"; exit 1; }
+echo "   3 copies of one reminder: 1 notification, other reminders unaffected"
+
 echo "== quick add prefill keeps the title out of argv"
 open_url=$(PROTONCAL_TITLE='Team sync' "$root/bin/protoncal-open" --date 2026-08-17 \
   --time 09:30 --title-env --prefill --print)
